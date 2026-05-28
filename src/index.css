@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body.capture-window,
+body.capture-window #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+body {
+  margin: 0;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+}
+
+.markdown-body {
+  @apply text-[13px] leading-relaxed text-neutral-600 dark:text-neutral-400;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body pre,
+.markdown-body blockquote,
+.markdown-body table {
+  @apply my-2;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  @apply mt-3 mb-1 font-medium text-neutral-800 dark:text-neutral-200;
+}
+
+.markdown-body h1 {
+  @apply text-[16px];
+}
+
+.markdown-body h2 {
+  @apply text-[15px];
+}
+
+.markdown-body h3,
+.markdown-body h4 {
+  @apply text-[14px];
+}
+
+.markdown-body ul {
+  @apply list-disc pl-5;
+}
+
+.markdown-body ol {
+  @apply list-decimal pl-5;
+}
+
+.markdown-body li + li {
+  @apply mt-0.5;
+}
+
+.markdown-body blockquote {
+  @apply border-l-2 border-neutral-300 pl-3 text-neutral-500 dark:border-neutral-600 dark:text-neutral-400;
+}
+
+.markdown-body code {
+  @apply rounded bg-neutral-100 px-1 py-0.5 font-mono text-[12px] text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200;
+}
+
+.markdown-body pre {
+  @apply overflow-x-auto rounded-md bg-neutral-100 p-3 dark:bg-neutral-800;
+}
+
+.markdown-body pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-body hr {
+  @apply my-3 border-neutral-200 dark:border-neutral-700;
+}
+
+.markdown-body table {
+  @apply w-full border-collapse text-[12px];
+}
+
+.markdown-body th,
+.markdown-body td {
+  @apply border border-neutral-200 px-2 py-1 text-left dark:border-neutral-700;
+}
+
+.markdown-body th {
+  @apply bg-neutral-50 font-medium dark:bg-neutral-800/60;
+}
+
+.markdown-compact > :first-child {
+  margin-top: 0;
+}
+
+.markdown-compact > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-compact p,
+.markdown-compact ul,
+.markdown-compact ol,
+.markdown-compact pre,
+.markdown-compact blockquote {
+  @apply my-0;
+}
+
+.markdown-compact h1,
+.markdown-compact h2,
+.markdown-compact h3,
+.markdown-compact h4 {
+  @apply mt-0 mb-0;
+}

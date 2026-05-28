@@ -1,0 +1,201 @@
+# DevTask — Cursor Agent Rules
+
+## Project Overview
+DevTask is a local-first, keyboard-driven task manager for developers.
+Built with Tauri v2 (Rust backend) + React + TypeScript + Tailwind CSS.
+Target: desktop app (macOS, Windows, Linux). Mobile (React Native) comes later.
+
+## Stack
+- Frontend: React 18, TypeScript, Tailwind CSS, Zustand, TanStack Query
+- Backend: Tauri v2, Rust
+- Database: SQLite via tauri-plugin-sql
+- Global shortcut: tauri-plugin-global-shortcut
+- Package manager: pnpm
+
+## Project Structure
+```
+src/
+  components/      # Reusable UI components (Sidebar, TaskItem, CaptureBar, GroupCard, TaskDetailPanel)
+  views/           # Page-level views (Today, AllTasks, ContextView, GroupView, TaskView)
+  store/           # Zustand stores (tasks.ts, contexts.ts) — UI state only
+  db/              # All database logic (schema.ts, queries.ts)
+  hooks/           # Custom React hooks (useTasks, useContexts, useGroups)
+  App.tsx
+src-tauri/
+  src/
+    main.rs
+    lib.rs         # SQL migrations live here
+```
+
+## Data Model
+Three-level hierarchy: **Context → Group → Task**
+
+```sql
+contexts: id, name, color (hex), position, created_at
+
+groups:   id, context_id (FK), name, description, color (optional override),
+          position, created_at, updated_at
+
+group_links: id, group_id (FK), label, url, kind (url|folder), position
+
+tasks:    id, title, description (multiline, markdown-friendly), context_id (FK),
+          group_id (nullable FK), state (todo|in_progress|testing|done),
+          is_today (0|1), start_date (optional ISO date YYYY-MM-DD),
+          end_date (optional ISO date YYYY-MM-DD), archived_at, created_at, updated_at
+```
+
+Default contexts: Work (#378ADD), Personal (#1D9E75), Learning (#7F77DD)
+
+**Groups** are the neutral organizing unit — user-facing name can be "Project", "Area", "Topic", etc.
+- `group_id` on tasks is **nullable** — not every task belongs to a group (especially quick captures)
+- Group color inherits from context by default; optional override via `groups.color`
+- Group links (repo, docs, local folders, etc.) live in `group_links` with `kind`: `url` or `folder`
+- Folder links open via Tauri `openPath`; URLs via `openUrl`. Pick folders with `@tauri-apps/plugin-dialog`
+
+## Core V1 Features
+1. Global hotkey capture (Cmd/Ctrl+Shift+Space) — system-wide, instant
+2. Contexts — Work, Personal, Learning (fixed top-level, no tags)
+3. Groups — optional middle layer inside each context (projects, areas, topics)
+4. Today view — tasks manually marked as today, flat list with subtle group labels
+5. All Tasks view — flat list across all contexts, with group labels
+6. Context view — group cards with task counts plus ungrouped tasks in the same scroll
+7. Group view — description, links, task list (same task behavior everywhere)
+8. Task view — full-page task detail (description, group assignment); replaces drawer/panel
+9. Task states — todo → in_progress → testing → done (only one in_progress at a time)
+10. Fully local, fully keyboard-driven — no account, no internet required
+
+## Capture Flow (keep it fast)
+Quick capture path: **title → context → save**. No group picker at capture time.
+- Group assignment happens later from the task detail panel
+- `lastUsedContextId` in Zustand remembers context for capture
+
+## Code Conventions
+
+### TypeScript
+- Always use strict TypeScript — no `any` types
+- Define all DB types in `src/types.ts`
+- Use `crypto.randomUUID()` for generating IDs
+- Dates stored as ISO strings in SQLite
+
+### React
+- Functional components only, no class components
+- Co-locate component styles with Tailwind — no separate CSS files
+- Use TanStack Query for all DB reads (enables caching + invalidation)
+- Use Zustand only for UI state (active view, selected task, last context etc.)
+- Never store server/DB data in Zustand — that's TanStack Query's job
+
+### Tauri
+- All DB calls go through `src/db/queries.ts` — never call `invoke` directly from components
+- SQL migrations are numbered in `src-tauri/src/lib.rs` (Migration version N)
+- `src/db/schema.ts` documents the canonical schema — keep in sync with migrations
+- Always run `cargo` commands from inside `src-tauri/` not the root
+- Keep Rust logic minimal — Tauri is a shell, business logic lives in TypeScript
+
+### Tailwind
+- Use Tailwind utility classes only — no custom CSS unless absolutely necessary
+- Dark mode via `dark:` variant — support it from day one
+- Consistent spacing: 8px base unit (p-2, gap-2 = 8px)
+
+### File naming
+- Components: PascalCase (`TaskItem.tsx`)
+- Hooks: camelCase with `use` prefix (`useTasks.ts`)
+- Stores: camelCase (`tasks.ts`)
+- DB files: camelCase (`queries.ts`, `schema.ts`)
+
+## Key Patterns
+
+### DB query pattern (always use this shape)
+```typescript
+// src/db/queries.ts
+import Database from '@tauri-apps/plugin-sql'
+
+let db: Database | null = null
+
+async function getDb(): Promise<Database> {
+  if (!db) db = await Database.load('sqlite:devtask.db')
+  return db
+}
+
+export async function getTasks(): Promise<Task[]> {
+  const db = await getDb()
+  return db.select<Task[]>(
+    `SELECT * FROM tasks WHERE archived_at IS NULL ORDER BY created_at DESC`
+  )
+}
+```
+
+### Zustand store pattern (UI state only)
+```typescript
+// src/store/contexts.ts
+import { create } from 'zustand'
+
+interface ContextsStore {
+  activeView: 'today' | 'all' | 'context' | 'group'
+  activeContextId: string | null
+  activeGroupId: string | null
+  setView: (view: ActiveView) => void
+  setContext: (id: string) => void
+  setGroup: (contextId: string, groupId: string) => void
+}
+```
+
+### TanStack Query pattern
+```typescript
+// src/hooks/useTasks.ts
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getTasks, createTask } from '../db/queries'
+
+export function useTasks() {
+  return useQuery({ queryKey: ['tasks'], queryFn: getTasks })
+}
+
+export function useCreateTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: createTask,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['groups'] })
+    },
+  })
+}
+```
+
+## Business Rules
+- Only one task can be `in_progress` at a time — enforce in query layer
+- Tasks move to `done` state, then auto-archive after 7 days (check on app start)
+- `is_today` resets to 0 at midnight — implement via Tauri event on app focus
+- Global shortcut focuses capture bar in main window (floating capture window is future work)
+- Capture input: title only (one line), context selector (default: last used), Enter to save
+- Group assignment is post-capture only — never block the hotkey path
+- When a task has a `group_id`, its `context_id` is synced from the group and cannot be changed independently — enforce in `updateTaskGroup`
+- Optional `start_date` / `end_date` on tasks (date-only, no time). Set in Task view. If both are set and start > end, end is bumped to match start on save.
+
+## What NOT to build in V1
+- Reminders / notifications
+- Subtasks
+- Search
+- Cloud sync (that's the paid tier)
+- Team features
+- Integrations (GitHub, Linear etc.)
+- Group picker at capture time
+
+## Keyboard Shortcuts
+- `Cmd/Ctrl+Shift+Space` — global capture (focus capture bar)
+- `N` — new task (when app is focused)
+- `1/2/3` — switch to Work/Personal/Learning context
+- `T` — switch to Today view
+- `A` — switch to All tasks view
+- `Enter` — open selected task (navigates to Task view)
+- `Space` — cycle task state (todo → in_progress → testing → done)
+- `M` — toggle task as today
+- `Escape` — back from task/group view, or deselect in lists
+
+## When helping with this project
+- Always prefer the simplest solution that works — no premature abstraction
+- If adding a dependency, check if Tauri already provides it natively first
+- Schema changes require a new numbered migration in `src-tauri/src/lib.rs`
+- Update `src/db/schema.ts` to stay in sync with migrations
+- Keep Rust code in lib.rs minimal — only what truly needs to be native
+- Protect the capture hotkey path — never add required fields to quick capture
+- This is a solo dev project — optimize for shipping, not architecture astronautics
