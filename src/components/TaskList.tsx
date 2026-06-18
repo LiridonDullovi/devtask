@@ -16,7 +16,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { IconGripVertical } from "@tabler/icons-react";
+import { useMemo } from "react";
 import type { Context, Group, Task } from "../types";
+import { useDataScope } from "../hooks/useDataScope";
+import { useWorkspaceMembers } from "../hooks/useWorkspaceMembers";
 import { EmptyState } from "./EmptyState";
 import { TASK_COLUMNS } from "../lib/taskStates";
 import { TaskItem } from "./TaskItem";
@@ -39,6 +42,7 @@ function SortableTaskRow({
   task,
   context,
   group,
+  assigneeLabel,
   showStateBadge,
   selected,
   onSelect,
@@ -47,6 +51,7 @@ function SortableTaskRow({
   task: Task;
   context?: Context;
   group?: Group;
+  assigneeLabel?: string;
   showStateBadge?: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -85,6 +90,7 @@ function SortableTaskRow({
           task={task}
           context={context}
           group={group}
+          assigneeLabel={assigneeLabel}
           showStateBadge={showStateBadge}
           selected={selected}
           onSelect={onSelect}
@@ -105,6 +111,7 @@ function TaskColumn({
   onCycleState,
   onReorder,
   showStateBadge,
+  assigneeLabels,
 }: {
   columnTasks: Task[];
   sortable: boolean;
@@ -115,6 +122,7 @@ function TaskColumn({
   onCycleState: (id: string) => void;
   onReorder?: (taskIds: string[]) => void;
   showStateBadge?: boolean;
+  assigneeLabels?: Record<string, string>;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -142,6 +150,9 @@ function TaskColumn({
         task={task}
         context={contextMap[task.context_id]}
         group={task.group_id ? groupMap[task.group_id] : undefined}
+        assigneeLabel={
+          task.assignee_id ? assigneeLabels?.[task.assignee_id] : undefined
+        }
         showStateBadge={showStateBadge}
         selected={selectedTaskId === task.id}
         onSelect={() => onSelectTask(task.id)}
@@ -153,6 +164,9 @@ function TaskColumn({
         task={task}
         context={contextMap[task.context_id]}
         group={task.group_id ? groupMap[task.group_id] : undefined}
+        assigneeLabel={
+          task.assignee_id ? assigneeLabels?.[task.assignee_id] : undefined
+        }
         showStateBadge={showStateBadge}
         selected={selectedTaskId === task.id}
         onSelect={() => onSelectTask(task.id)}
@@ -194,6 +208,18 @@ export function TaskList({
 }: TaskListProps) {
   const contextMap = Object.fromEntries(contexts.map((c) => [c.id, c]));
   const groupMap = Object.fromEntries(groups.map((g) => [g.id, g]));
+  const dataScope = useDataScope();
+  const workspaceId =
+    dataScope.kind === "workspace" ? dataScope.workspaceId : undefined;
+  const { data: members = [] } = useWorkspaceMembers(workspaceId);
+  const assigneeLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const member of members) {
+      map[member.user_id] =
+        member.display_name || member.email.split("@")[0];
+    }
+    return map;
+  }, [members]);
 
   if (tasks.length === 0) {
     if (embedded && !emptyTitle) return null;
@@ -228,6 +254,7 @@ export function TaskList({
                 onSelectTask={onSelectTask}
                 onCycleState={onCycleState}
                 onReorder={onReorder}
+                assigneeLabels={assigneeLabels}
               />
             </div>
           );
@@ -267,6 +294,7 @@ export function TaskList({
                     onCycleState={onCycleState}
                     onReorder={onReorder}
                     showStateBadge={false}
+                    assigneeLabels={assigneeLabels}
                   />
                 )}
               </div>

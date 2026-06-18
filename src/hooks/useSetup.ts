@@ -5,11 +5,14 @@ import {
   isSetupComplete,
 } from "../db/queries";
 
+import { invalidateAllAppData } from "../lib/queryInvalidation";
+
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ["app", "setup"] });
-  qc.invalidateQueries({ queryKey: ["contexts"] });
-  qc.invalidateQueries({ queryKey: ["tasks"] });
-  qc.invalidateQueries({ queryKey: ["groups"] });
+  void qc.invalidateQueries({
+    queryKey: ["app", "setup"],
+    refetchType: "active",
+  });
+  void invalidateAllAppData(qc);
 }
 
 export function useSetupStatus() {

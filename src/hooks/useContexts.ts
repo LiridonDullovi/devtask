@@ -3,6 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { scopeQueryKey } from "../db/dataScope";
 import {
   createContext,
   deleteContext,
@@ -11,30 +12,30 @@ import {
   updateContext,
   type DeleteContextMode,
 } from "../db/queries";
-
-function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ["contexts"] });
-  qc.invalidateQueries({ queryKey: ["tasks"] });
-  qc.invalidateQueries({ queryKey: ["groups"] });
-}
+import { invalidateScopedData } from "../lib/queryInvalidation";
+import { useDataScope } from "./useDataScope";
 
 export function useContexts() {
+  const dataScope = useDataScope();
   return useQuery({
-    queryKey: ["contexts"],
-    queryFn: getContexts,
+    queryKey: scopeQueryKey(["contexts"], dataScope),
+    queryFn: () => getContexts(dataScope),
   });
 }
 
 export function useCreateContext() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
-    mutationFn: createContext,
-    onSuccess: () => invalidateAll(qc),
+    mutationFn: (input: { name: string; color?: string }) =>
+      createContext(input, dataScope),
+    onSuccess: () => void invalidateScopedData(qc, dataScope),
   });
 }
 
 export function useUpdateContext() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({
       contextId,
@@ -47,19 +48,20 @@ export function useUpdateContext() {
       color?: string;
       description?: string;
     }) => updateContext(contextId, { name, color, description }),
-    onSuccess: () => invalidateAll(qc),
+    onSuccess: () => void invalidateScopedData(qc, dataScope),
   });
 }
 
 export function useDeleteContext() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: (input: {
       contextId: string;
       mode: DeleteContextMode;
       reassignToContextId?: string;
-    }) => deleteContext(input),
-    onSuccess: () => invalidateAll(qc),
+    }) => deleteContext(input, dataScope),
+    onSuccess: () => void invalidateScopedData(qc, dataScope),
   });
 }
 

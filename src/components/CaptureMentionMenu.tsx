@@ -3,7 +3,7 @@ import type { MentionSuggestion } from "../lib/captureMentions";
 
 interface CaptureMentionMenuProps {
   open: boolean;
-  type: "context" | "group";
+  type: "context" | "group" | "workspace";
   suggestions: MentionSuggestion[];
   highlightIndex: number;
   onHighlight: (index: number) => void;
@@ -40,7 +40,11 @@ export function CaptureMentionMenu({
   const menuPanel = (
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
         <div className="border-b border-neutral-200 px-3 py-1.5 text-[10px] uppercase tracking-wider text-neutral-400 dark:border-neutral-800">
-          {type === "context" ? "Contexts" : "Groups"}
+          {type === "context"
+            ? "Contexts"
+            : type === "group"
+              ? "Groups"
+              : "Workspace"}
         </div>
         <div ref={listRef} className="max-h-40 overflow-y-auto py-1">
           {suggestions.length === 0 ? (
@@ -91,7 +95,7 @@ export function CaptureMentionMenu({
                 </span>
                 {item.tag && (
                   <span className="shrink-0 font-mono text-[11px] text-neutral-400">
-                    {type === "context" ? "#" : "@"}
+                    {type === "context" ? "#" : type === "group" ? "@" : "$"}
                     {item.tag}
                   </span>
                 )}

@@ -3,9 +3,17 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { register } from "@tauri-apps/plugin-global-shortcut";
 import { archiveOldDoneTasks } from "./db/queries";
+import { AppHeader } from "./components/AppHeader";
+import { DataScopeBridge } from "./components/DataScopeBridge";
+import { WorkspaceAuthBridge } from "./components/WorkspaceAuthBridge";
+import { WorkspaceSyncBridge } from "./components/WorkspaceSyncBridge";
+import { SyncConflictBridge } from "./components/SyncConflictBridge";
+import { WorkspaceRealtimeBridge } from "./components/WorkspaceRealtimeBridge";
+import { invalidateAllAppData } from "./lib/queryInvalidation";
 import { CommandPalette } from "./components/CommandPalette";
 import { SetupWizard } from "./components/SetupWizard";
 import { Sidebar } from "./components/Sidebar";
+import { WorkspaceScopeBanner } from "./components/WorkspaceScopeBanner";
 import { useContexts } from "./hooks/useContexts";
 import { useSetupStatus } from "./hooks/useSetup";
 import {
@@ -70,8 +78,7 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen("task-created", () => {
-      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      void queryClient.invalidateQueries({ queryKey: ["groups"] });
+      void invalidateAllAppData(queryClient);
     }).then((fn) => {
       unlisten = fn;
     });
@@ -198,16 +205,25 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-      <Sidebar />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {activeView === "today" && <Today onAddTask={openCapture} />}
+    <div className="flex h-screen flex-col overflow-hidden border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+      <WorkspaceAuthBridge />
+      <DataScopeBridge />
+      <WorkspaceSyncBridge />
+      <WorkspaceRealtimeBridge />
+      <SyncConflictBridge />
+      <AppHeader />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <Sidebar />
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <WorkspaceScopeBanner />
+          {activeView === "today" && <Today onAddTask={openCapture} />}
         {activeView === "all" && <AllTasks onAddTask={openCapture} />}
         {activeView === "context" && <ContextView onAddTask={openCapture} />}
         {activeView === "group" && <GroupView onAddTask={openCapture} />}
         {activeView === "settings" && <SettingsView />}
         {activeView === "task" && <TaskView />}
-      </main>
+        </main>
+      </div>
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}

@@ -1,4 +1,5 @@
 import type { Context, Group } from "../types";
+import type { DataScope, WorkspaceSummary } from "../types/workspace";
 
 function normalizeTag(tag: string): string {
   return tag.toLowerCase().replace(/[\s_-]+/g, "");
@@ -45,20 +46,59 @@ function matchGroupByMention(
   return matches[0];
 }
 
+function matchWorkspaceByTag(
+  tag: string,
+  workspaces: WorkspaceSummary[],
+): WorkspaceSummary | undefined {
+  const normalized = normalizeTag(tag);
+  return workspaces.find((ws) => {
+    const nameNorm = normalizeTag(ws.name);
+    const slugNorm = ws.slug ? normalizeTag(ws.slug) : "";
+    return (
+      nameNorm === normalized ||
+      slugNorm === normalized ||
+      ws.name.toLowerCase() === tag.toLowerCase()
+    );
+  });
+}
+
 export interface ParsedCaptureInput {
   title: string;
   contextId?: string;
   groupId?: string;
+  dataScope?: DataScope;
+  workspaceId?: string;
 }
 
 export function parseCaptureInput(
   raw: string,
   contexts: Context[],
   groups: Group[] = [],
+  workspaces: WorkspaceSummary[] = [],
 ): ParsedCaptureInput {
   let title = raw.trim();
   let contextId: string | undefined;
   let groupId: string | undefined;
+  let dataScope: DataScope | undefined;
+  let workspaceId: string | undefined;
+
+  const workspaceMatches = [...title.matchAll(/\$([\w-]+)/g)];
+  for (const match of workspaceMatches) {
+    const tag = match[1];
+    if (normalizeTag(tag) === "personal") {
+      dataScope = "personal";
+      workspaceId = undefined;
+      title = title.replace(match[0], "").trim();
+      break;
+    }
+    const ws = matchWorkspaceByTag(tag, workspaces);
+    if (ws) {
+      dataScope = "workspace";
+      workspaceId = ws.id;
+      title = title.replace(match[0], "").trim();
+      break;
+    }
+  }
 
   const hashMatches = [...title.matchAll(/#(\w+)/g)];
   for (const match of hashMatches) {
@@ -81,5 +121,11 @@ export function parseCaptureInput(
     }
   }
 
-  return { title: title.replace(/\s+/g, " ").trim(), contextId, groupId };
+  return {
+    title: title.replace(/\s+/g, " ").trim(),
+    contextId,
+    groupId,
+    dataScope,
+    workspaceId,
+  };
 }

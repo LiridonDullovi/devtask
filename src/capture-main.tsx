@@ -23,8 +23,9 @@ const queryClient = new QueryClient({
   mutationCache: new MutationCache({ onError: handleError }),
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 0,
       retry: 1,
+      refetchOnMount: true,
     },
   },
 });

@@ -54,6 +54,20 @@ export interface Task {
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Workspace tasks only — Supabase auth user id */
+  assignee_id?: string | null;
+  created_by_id?: string | null;
+}
+
+/** Workspace task thread comment (markdown body). */
+export interface TaskComment {
+  id: string;
+  workspace_id: string;
+  task_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DatabaseExport {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DeleteContextDialog } from "../components/DeleteContextDialog";
 import { EditContextDialog } from "../components/EditContextDialog";
 import { EmptyState } from "../components/EmptyState";
@@ -45,6 +45,12 @@ export function ContextView({ onAddTask }: ContextViewProps) {
     !isLoading && groups.length === 0 && ungroupedTasks.length === 0;
   const otherContexts = contexts.filter((c) => c.id !== activeContextId);
   const canDelete = contexts.length > 1 && !!context;
+
+  useEffect(() => {
+    if (activeContextId) {
+      setLastUsedContextId(activeContextId);
+    }
+  }, [activeContextId, setLastUsedContextId]);
 
   async function handleCreateGroup() {
     const name = newGroupName.trim();

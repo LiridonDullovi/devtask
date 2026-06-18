@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IconBolt, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   forwardRef,
   useEffect,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import { CaptureMentionMenu } from "./CaptureMentionMenu";
 import { Select } from "./Select";
+import { useAuth } from "../hooks/useAuth";
 import { useContexts } from "../hooks/useContexts";
 import {
   useAllGroups,
@@ -18,15 +20,24 @@ import {
   useGroupsByContext,
 } from "../hooks/useGroups";
 import { useCreateTask, useTasks } from "../hooks/useTasks";
+import { useWorkspaces } from "../hooks/useWorkspaces";
 import {
   applyMentionSelection,
   getActiveMention,
   getContextMentionSuggestions,
   getGroupMentionSuggestions,
+  getWorkspaceMentionSuggestions,
 } from "../lib/captureMentions";
+import { readCaptureNav } from "../lib/captureDefaults";
+import { getContexts } from "../db/queries";
+import { getQueryScopeFromStorage, scopeQueryKey } from "../db/dataScope";
+import { applyCaptureWorkspace } from "../lib/captureWorkspace";
+import {
+  getStoredCaptureWorkspace,
+  getStoredDataScope,
+} from "../lib/workspace";
 import { emitTaskCreated, setCaptureWindowHeight } from "../lib/captureWindow";
 import { normalizeTag, parseCaptureInput } from "../lib/parseCapture";
-import { useContextsStore } from "../store/contexts";
 import { useTasksStore } from "../store/tasks";
 
 export interface CaptureBarHandle {
@@ -51,12 +62,14 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [mentionHighlight, setMentionHighlight] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState(false);
+  const queryClient = useQueryClient();
   const createTask = useCreateTask();
   const createGroup = useCreateGroup();
+  const { user, isSignedIn } = useAuth();
+  const { data: workspaces = [] } = useWorkspaces(user?.id);
   const { data: contexts = [] } = useContexts();
   const { data: allGroups = [] } = useAllGroups();
   const { data: allTasks = [] } = useTasks();
-  const { activeView, activeContextId, activeGroupId } = useContextsStore();
   const {
     lastUsedContextId,
     setLastUsedContextId,
@@ -64,26 +77,56 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
     setSelectedTaskId,
   } = useTasksStore();
 
+  const [captureNav, setCaptureNav] = useState(readCaptureNav);
+  const [captureScope, setCaptureScope] = useState(getStoredDataScope);
+  const [captureWorkspace, setCaptureWorkspace] = useState(
+    getStoredCaptureWorkspace,
+  );
+
+  function refreshCaptureNav() {
+    setCaptureNav(readCaptureNav());
+    setCaptureScope(getStoredDataScope());
+    setCaptureWorkspace(getStoredCaptureWorkspace());
+  }
+
   const defaultContextId =
-    (activeView === "context" || activeView === "group") && activeContextId
-      ? activeContextId
+    (captureNav.activeView === "context" ||
+      captureNav.activeView === "group") &&
+    captureNav.activeContextId
+      ? captureNav.activeContextId
       : lastUsedContextId;
 
+  const navGroupId =
+    captureNav.activeView === "group" && captureNav.activeGroupId
+      ? captureNav.activeGroupId
+      : null;
+
   function syncCaptureDefaults() {
-    const nav = useContextsStore.getState();
+    const nav = readCaptureNav();
+    setCaptureNav(nav);
     setSelectedGroupId(
       nav.activeView === "group" && nav.activeGroupId ? nav.activeGroupId : "",
     );
   }
 
   useEffect(() => {
+    refreshCaptureNav();
     syncCaptureDefaults();
-  }, [activeView, activeGroupId]);
+  }, []);
 
   const parsed = useMemo(
-    () => parseCaptureInput(value, contexts, allGroups),
-    [value, contexts, allGroups],
+    () => parseCaptureInput(value, contexts, allGroups, workspaces),
+    [value, contexts, allGroups, workspaces],
   );
+
+  const displayScope = parsed.dataScope ?? captureScope;
+  const displayWorkspace =
+    parsed.workspaceId != null
+      ? (workspaces.find((w) => w.id === parsed.workspaceId) ??
+        captureWorkspace)
+      : parsed.dataScope === "personal"
+        ? null
+        : captureWorkspace;
 
   const contextId =
     parsed.contextId ??
@@ -107,13 +150,20 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
     if (activeMention.type === "context") {
       return getContextMentionSuggestions(contexts, activeMention.query);
     }
+    if (activeMention.type === "workspace") {
+      return getWorkspaceMentionSuggestions(
+        workspaces,
+        activeMention.query,
+        isSignedIn,
+      );
+    }
     return getGroupMentionSuggestions(
       groups,
       activeMention.query,
       activeContext?.name,
       activeContext?.color,
     );
-  }, [activeMention, contexts, groups, activeContext]);
+  }, [activeMention, contexts, groups, activeContext, workspaces, isSignedIn]);
 
   const mentionMenuOpen =
     focused &&
@@ -206,11 +256,32 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
       const name = item.createName?.trim();
       if (!name || !contextId) return;
       try {
-        const created = await createGroup.mutateAsync({ contextId, name });
+        const created = await createGroup.mutateAsync({
+          contextId,
+          name,
+          scopeOverride: getQueryScopeFromStorage(),
+        });
         tag = normalizeTag(created.name);
       } catch {
         return;
       }
+    }
+
+    if (activeMention.type === "workspace") {
+      if (item.id === "__personal__") {
+        applyCaptureWorkspace("personal");
+      } else if (
+        !item.disabled &&
+        item.id !== "__hint__" &&
+        item.id !== "__nomatch__"
+      ) {
+        applyCaptureWorkspace("workspace", {
+          id: item.id,
+          name: item.label,
+        });
+      }
+      setSelectedGroupId("");
+      refreshCaptureNav();
     }
 
     const { nextValue, nextCursor } = applyMentionSelection(
@@ -230,21 +301,58 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
   }
 
   async function handleSubmit() {
+    const parsedSubmit = parseCaptureInput(
+      value,
+      contexts,
+      allGroups,
+      workspaces,
+    );
     const {
       title,
       contextId: parsedContextId,
       groupId: parsedGroupId,
-    } = parseCaptureInput(value, contexts, allGroups);
+      dataScope: parsedScope,
+      workspaceId: parsedWorkspaceId,
+    } = parsedSubmit;
     if (!title) return;
 
-    const isToday = activeView === "today";
+    if (parsedScope) {
+      if (parsedScope === "personal") {
+        applyCaptureWorkspace("personal");
+      } else if (parsedWorkspaceId) {
+        const ws = workspaces.find((w) => w.id === parsedWorkspaceId);
+        if (ws) {
+          applyCaptureWorkspace("workspace", { id: ws.id, name: ws.name });
+        }
+      }
+      refreshCaptureNav();
+    }
+
+    const scopeOverride = getQueryScopeFromStorage();
+
+    let submitContexts = contexts;
+    if (parsedScope) {
+      submitContexts = await queryClient.fetchQuery({
+        queryKey: scopeQueryKey(["contexts"], scopeOverride),
+        queryFn: () => getContexts(scopeOverride),
+      });
+    }
+
+    const nav = readCaptureNav();
+    const isToday = nav.activeView === "today";
     const resolvedContextId =
       parsedContextId ??
-      contexts.find((c) => c.id === contextId)?.id ??
-      contexts[0]?.id;
+      submitContexts.find((c) => c.id === contextId)?.id ??
+      submitContexts.find((c) => c.id === defaultContextId)?.id ??
+      submitContexts[0]?.id;
     if (!resolvedContextId) return;
 
-    const groupId = (parsedGroupId ?? selectedGroupId) || null;
+    const submitGroupId =
+      nav.activeView === "group" && nav.activeGroupId
+        ? nav.activeGroupId
+        : null;
+    const groupId =
+      (parsedGroupId ?? selectedGroupId ?? submitGroupId) || null;
 
     try {
       await createTask.mutateAsync({
@@ -252,6 +360,7 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
         contextId: resolvedContextId,
         groupId,
         isToday,
+        scopeOverride,
       });
     } catch {
       return;
@@ -277,6 +386,36 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
     const next = contexts[(idx + 1) % contexts.length];
     setLastUsedContextId(next.id);
     setSelectedGroupId("");
+  }
+
+  function cycleWorkspace() {
+    const options: Array<
+      | { kind: "personal" }
+      | { kind: "workspace"; id: string; name: string }
+    > = [{ kind: "personal" }, ...workspaces.map((w) => ({
+      kind: "workspace" as const,
+      id: w.id,
+      name: w.name,
+    }))];
+    if (options.length <= 1) return;
+
+    const current =
+      displayScope === "workspace" && displayWorkspace
+        ? displayWorkspace.id
+        : "personal";
+    const idx = options.findIndex((o) =>
+      o.kind === "personal"
+        ? current === "personal"
+        : o.id === current,
+    );
+    const next = options[(idx + 1) % options.length];
+    if (next.kind === "personal") {
+      applyCaptureWorkspace("personal");
+    } else {
+      applyCaptureWorkspace("workspace", { id: next.id, name: next.name });
+    }
+    setSelectedGroupId("");
+    refreshCaptureNav();
   }
 
   function navigateRecent(direction: 1 | -1) {
@@ -419,7 +558,7 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
           onKeyUp={syncCursor}
           onClick={syncCursor}
           onKeyDown={handleInputKeyDown}
-          placeholder="Quick capture… #work @project"
+          placeholder="Quick capture… $team #work @project"
           className="min-w-0 flex-1 bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
         />
         {!focused && !isFloating && (
@@ -441,6 +580,28 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
               </>
             )}
             <span>·</span>
+            <span>
+              {displayScope === "workspace" && displayWorkspace
+                ? `workspace: ${displayWorkspace.name}`
+                : "personal"}
+              {parsed.dataScope && (
+                <span className="text-neutral-500"> (from $)</span>
+              )}
+            </span>
+            {(workspaces.length > 0 || displayScope === "workspace") && (
+              <>
+                <span>·</span>
+                <button
+                  type="button"
+                  className="underline"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={cycleWorkspace}
+                >
+                  cycle workspace
+                </button>
+              </>
+            )}
+            <span>·</span>
             <span className="inline-flex items-center gap-1">
               context:{" "}
               {activeContext && (
@@ -454,13 +615,14 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
                 <span className="text-neutral-500"> (from #)</span>
               )}
             </span>
-            {(parsedGroup || effectiveGroupId) && (
+            {(parsedGroup || effectiveGroupId || navGroupId) && (
               <>
                 <span>·</span>
                 <span>
                   group:{" "}
                   {parsedGroup?.name ??
                     groups.find((g) => g.id === effectiveGroupId)?.name ??
+                    groups.find((g) => g.id === navGroupId)?.name ??
                     "selected"}
                   {parsed.groupId && (
                     <span className="text-neutral-500"> (from @)</span>
@@ -482,7 +644,7 @@ export const CaptureBar = forwardRef<CaptureBarHandle, CaptureBarProps>(
               </>
             )}
             <span>·</span>
-            <span># / @ for suggestions</span>
+            <span>$ workspace · # context · @ group</span>
             {!isFloating && (
               <>
                 <span>·</span>

@@ -2,6 +2,11 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { isSetupComplete } from "../db/queries";
+import { publishCaptureNav } from "./captureDefaults";
+import { storeCaptureWorkspace } from "./workspace";
+import { useContextsStore } from "../store/contexts";
+import { useTasksStore } from "../store/tasks";
+import { useWorkspaceStore } from "../store/workspace";
 
 const CAPTURE_LABEL = "capture";
 const CAPTURE_WIDTH = 560;
@@ -12,8 +17,28 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** Push current main-window context/group into localStorage for the capture window. */
+export function syncCaptureNavForOpen(): void {
+  const { activeView, activeContextId, activeGroupId } =
+    useContextsStore.getState();
+  const { scope, workspace } = useWorkspaceStore.getState();
+
+  publishCaptureNav({ activeView, activeContextId, activeGroupId });
+  if (activeContextId) {
+    useTasksStore.getState().setLastUsedContextId(activeContextId);
+  }
+
+  if (scope === "workspace" && workspace.id) {
+    storeCaptureWorkspace(workspace);
+  } else {
+    storeCaptureWorkspace(null);
+  }
+}
+
 export async function showCaptureWindow(): Promise<void> {
   if (!isTauri()) return;
+
+  syncCaptureNavForOpen();
 
   let setup = false;
   try {
