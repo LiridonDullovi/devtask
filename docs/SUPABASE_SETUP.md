@@ -23,6 +23,7 @@ Open **SQL Editor** in the dashboard and run these migrations **in order**:
 4. `supabase/migrations/20260528150000_task_assignee.sql` — task assignee + creator columns
 5. `supabase/migrations/20260528160000_task_comments.sql` — task comment threads
 6. `supabase/migrations/20260528170000_workspace_storage.sql` — private image bucket for markdown
+7. `supabase/migrations/20260528180000_workspace_invites.sql` — pending invites (invite an email before they have an account)
 
 Or, if you use the Supabase CLI linked to this repo:
 
@@ -68,7 +69,9 @@ See `.env.example` in the repo root.
 
 In **Settings → Team workspace**, with a workspace selected in the header:
 
-1. **Members** — owners/admins can invite by email (user must already exist in **Authentication → Users**).
+1. **Members** — owners/admins can invite by email.
+   - If the person already has a DevTask account, they're added to the workspace immediately.
+   - If not, the invite goes into a **Pending invites** list (shown in the same panel, with a revoke button) and activates automatically the moment they sign up with that email — no separate "tell them to sign up first" step needed.
 2. Invited users see the workspace in the header switcher after sign-in.
 3. **Sync now** — pull team tasks into the local cache; edits in workspace mode push to Supabase.
 
@@ -156,3 +159,5 @@ Local IDs today are strings like `ctx-work`. Cloud rows use **UUID**. The sync l
 - [x] App: task comments (workspace tasks)
 - [x] App: markdown image upload (workspace-assets bucket)
 - [x] App: conflict resolution (last-write-wins by updated_at)
+- [x] App: pending invites (invite by email before signup)
+- [x] Sync engine: batched pull/push (no more one round trip per row)

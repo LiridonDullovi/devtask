@@ -2,10 +2,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { invalidateScopedData } from "../lib/queryInvalidation";
+import { getErrorMessage } from "../lib/errors";
 import { getSupabase } from "../lib/supabase";
 import { DEFAULT_WORKSPACE } from "../lib/workspace";
 import { useWorkspaceStore } from "../store/workspace";
+import { toastError } from "../store/toast";
 import { syncWorkspacePull } from "../sync/workspaceSync";
+
+const RETRY_DELAY_MS = 2000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const REALTIME_TABLES = [
   "tasks",
@@ -32,12 +40,23 @@ export function WorkspaceRealtimeBridge() {
     }
 
     const supabase = getSupabase();
+    let cancelled = false;
 
     const schedulePull = () => {
       clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        void syncWorkspacePull(workspaceId)
-          .then((result) => {
+        void (async () => {
+          try {
+            let result;
+            try {
+              result = await syncWorkspacePull(workspaceId!);
+            } catch {
+              if (cancelled) return;
+              await delay(RETRY_DELAY_MS);
+              if (cancelled) return;
+              result = await syncWorkspacePull(workspaceId!);
+            }
+            if (cancelled) return;
             setLastSyncedAt(result.syncedAt);
             void invalidateScopedData(queryClient, {
               kind: "workspace",
@@ -47,10 +66,11 @@ export function WorkspaceRealtimeBridge() {
               queryKey: ["task-comments"],
               refetchType: "active",
             });
-          })
-          .catch(() => {
-            /* initial pull in WorkspaceSyncBridge handles errors */
-          });
+          } catch (error) {
+            if (cancelled) return;
+            toastError(`Live sync failed: ${getErrorMessage(error)}`);
+          }
+        })();
       }, 500);
     };
 
@@ -70,6 +90,7 @@ export function WorkspaceRealtimeBridge() {
     channel.subscribe();
 
     return () => {
+      cancelled = true;
       clearTimeout(debounceRef.current);
       void supabase.removeChannel(channel);
     };

@@ -11,6 +11,24 @@ export interface WorkspaceMemberRow {
   created_at: string;
 }
 
+export interface InviteResult {
+  user_id: string | null;
+  email: string;
+  display_name: string | null;
+  role: WorkspaceRole;
+  created_at: string;
+  /** "member" when the invitee already had an account and was added directly,
+   *  "pending" when they don't yet — they join automatically once they sign up. */
+  status: "member" | "pending";
+}
+
+export interface PendingInviteRow {
+  id: string;
+  email: string;
+  role: WorkspaceRole;
+  created_at: string;
+}
+
 function isActiveWorkspaceId(id: string | undefined): id is string {
   return Boolean(id && id !== DEFAULT_WORKSPACE.id);
 }
@@ -43,7 +61,7 @@ export function useInviteWorkspaceMember(workspaceId: string | undefined) {
     }: {
       email: string;
       role: Exclude<WorkspaceRole, "owner">;
-    }) => {
+    }): Promise<InviteResult> => {
       if (!isActiveWorkspaceId(workspaceId)) {
         throw new Error("Select a workspace first.");
       }
@@ -55,12 +73,48 @@ export function useInviteWorkspaceMember(workspaceId: string | undefined) {
       });
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error("Member was added but no data was returned.");
-      return row;
+      if (!row) throw new Error("Invite was sent but no data was returned.");
+      return row as InviteResult;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["workspace-members", workspaceId] });
+      void qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceId] });
       void qc.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
+async function fetchPendingInvites(
+  workspaceId: string,
+): Promise<PendingInviteRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc("list_pending_invites", {
+    p_workspace_id: workspaceId,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export function usePendingInvites(workspaceId: string | undefined) {
+  return useQuery({
+    queryKey: ["workspace-invites", workspaceId],
+    queryFn: () => fetchPendingInvites(workspaceId!),
+    enabled: isActiveWorkspaceId(workspaceId),
+  });
+}
+
+export function useRevokeInvite(workspaceId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      const supabase = getSupabase();
+      const { error } = await supabase.rpc("revoke_workspace_invite", {
+        p_invite_id: inviteId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["workspace-invites", workspaceId] });
     },
   });
 }

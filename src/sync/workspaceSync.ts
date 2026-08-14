@@ -1,6 +1,6 @@
 import { getDb, getTask } from "../db/queries";
 import { getTaskComment } from "../db/taskComments";
-import type { Context, Group, GroupLink } from "../types";
+import type { Context, Group, GroupLink, Task } from "../types";
 import {
   getWorkspaceLastSyncedAt,
   mergeWorkspaceCache,
@@ -9,11 +9,11 @@ import {
 import { getSupabase } from "../lib/supabase";
 import { fetchDeletedIds } from "./conflictGuard";
 import {
-  pushContextUpsert,
-  pushGroupLinkUpsert,
-  pushGroupUpsert,
-  pushTaskCommentUpsert,
-  pushTaskUpsert,
+  pushContextsUpsertMany,
+  pushGroupLinksUpsertMany,
+  pushGroupsUpsertMany,
+  pushTaskCommentsUpsertMany,
+  pushTasksUpsertMany,
 } from "./workspacePush";
 
 export interface WorkspaceSyncCounts {
@@ -31,65 +31,65 @@ async function repushLocalWinners(
 ): Promise<void> {
   const database = await getDb();
 
-  for (const id of merge.repushContextIds) {
-    const ctxRows = await database.select<
-      (Context & { updated_at: string })[]
-    >(
-      "SELECT id, name, color, description, position, created_at, updated_at FROM contexts WHERE id = $1",
-      [id],
+  if (merge.repushContextIds.length > 0) {
+    const placeholders = merge.repushContextIds
+      .map((_, i) => `$${i + 1}`)
+      .join(", ");
+    const ctxRows = await database.select<(Context & { updated_at: string })[]>(
+      `SELECT id, name, color, description, position, created_at, updated_at
+       FROM contexts WHERE id IN (${placeholders})`,
+      merge.repushContextIds,
     );
-    const ctx = ctxRows[0];
-    if (ctx) {
-      await pushContextUpsert(
-        {
-          id: ctx.id,
-          name: ctx.name,
-          color: ctx.color,
-          description: ctx.description,
-          position: ctx.position,
-          created_at: ctx.created_at,
-        },
-        workspaceId,
-        ctx.updated_at,
-      );
-    }
+    await pushContextsUpsertMany(ctxRows, workspaceId);
   }
 
-  for (const id of merge.repushGroupIds) {
+  if (merge.repushGroupIds.length > 0) {
+    const placeholders = merge.repushGroupIds
+      .map((_, i) => `$${i + 1}`)
+      .join(", ");
     const groupRows = await database.select<Group[]>(
-      "SELECT * FROM groups WHERE id = $1",
-      [id],
+      `SELECT * FROM groups WHERE id IN (${placeholders})`,
+      merge.repushGroupIds,
     );
-    const group = groupRows[0];
-    if (group) await pushGroupUpsert(group, workspaceId);
+    await pushGroupsUpsertMany(groupRows, workspaceId);
   }
 
-  for (const id of merge.repushGroupLinkIds) {
-    const linkRows = await database.select<GroupLink[]>(
-      "SELECT * FROM group_links WHERE id = $1",
-      [id],
+  if (merge.repushGroupLinkIds.length > 0) {
+    const placeholders = merge.repushGroupLinkIds
+      .map((_, i) => `$${i + 1}`)
+      .join(", ");
+    const linkRows = await database.select<
+      (GroupLink & { created_at: string; updated_at: string })[]
+    >(
+      `SELECT * FROM group_links WHERE id IN (${placeholders})`,
+      merge.repushGroupLinkIds,
     );
-    const link = linkRows[0];
-    const tsRows = await database.select<{ updated_at: string; created_at: string }[]>(
-      "SELECT created_at, updated_at FROM group_links WHERE id = $1",
-      [id],
+    await pushGroupLinksUpsertMany(
+      linkRows.map((link) => ({
+        link,
+        createdAt: link.created_at,
+        updatedAt: link.updated_at,
+      })),
+      workspaceId,
     );
-    if (link && tsRows[0]) {
-      await pushGroupLinkUpsert(link, workspaceId, {
-        createdAt: tsRows[0].created_at,
-        updatedAt: tsRows[0].updated_at,
-      });
+  }
+
+  if (merge.repushTaskIds.length > 0) {
+    const tasks: Task[] = [];
+    for (const id of merge.repushTaskIds) {
+      const task = await getTask(id);
+      if (task) tasks.push(task);
     }
+    await pushTasksUpsertMany(tasks, workspaceId);
   }
 
-  for (const id of merge.repushTaskIds) {
-    const task = await getTask(id);
-    if (task) await pushTaskUpsert(task, workspaceId);
-  }
-
-  for (const id of merge.repushCommentIds) {
-    const comment = await getTaskComment(id);
-    if (comment) await pushTaskCommentUpsert(comment, workspaceId);
+  if (merge.repushCommentIds.length > 0) {
+    const comments: Parameters<typeof pushTaskCommentsUpsertMany>[0] = [];
+    for (const id of merge.repushCommentIds) {
+      const comment = await getTaskComment(id);
+      if (comment) comments.push(comment);
+    }
+    await pushTaskCommentsUpsertMany(comments, workspaceId);
   }
 }
 

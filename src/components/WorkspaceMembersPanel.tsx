@@ -1,9 +1,11 @@
-import { IconMail, IconTrash, IconUserPlus } from "@tabler/icons-react";
+import { IconClock, IconMail, IconTrash, IconUserPlus } from "@tabler/icons-react";
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import {
   useInviteWorkspaceMember,
+  usePendingInvites,
   useRemoveWorkspaceMember,
+  useRevokeInvite,
   useWorkspaceMembers,
 } from "../hooks/useWorkspaceMembers";
 import { useWorkspaces } from "../hooks/useWorkspaces";
@@ -27,8 +29,12 @@ export function WorkspaceMembersPanel() {
     activeMeta?.role === "owner" || activeMeta?.role === "admin";
 
   const { data: members = [], isLoading } = useWorkspaceMembers(workspaceId);
+  const { data: pendingInvites = [] } = usePendingInvites(
+    canManage ? workspaceId : undefined,
+  );
   const inviteMember = useInviteWorkspaceMember(workspaceId);
   const removeMember = useRemoveWorkspaceMember(workspaceId);
+  const revokeInvite = useRevokeInvite(workspaceId);
 
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] =
@@ -47,12 +53,16 @@ export function WorkspaceMembersPanel() {
     const trimmed = email.trim();
     if (!trimmed) return;
     try {
-      const added = await inviteMember.mutateAsync({
+      const result = await inviteMember.mutateAsync({
         email: trimmed,
         role: inviteRole,
       });
       setEmail("");
-      toastSuccess(`Added ${added.email} to the workspace.`);
+      toastSuccess(
+        result.status === "pending"
+          ? `Invited ${result.email} — they'll join automatically once they sign up with this email.`
+          : `Added ${result.email} to the workspace.`,
+      );
     } catch (error) {
       toastError(getErrorMessage(error));
     }
@@ -62,6 +72,15 @@ export function WorkspaceMembersPanel() {
     try {
       await removeMember.mutateAsync(memberUserId);
       toastSuccess(`Removed ${memberEmail} from the workspace.`);
+    } catch (error) {
+      toastError(getErrorMessage(error));
+    }
+  }
+
+  async function handleRevokeInvite(inviteId: string, inviteEmail: string) {
+    try {
+      await revokeInvite.mutateAsync(inviteId);
+      toastSuccess(`Revoked invite for ${inviteEmail}.`);
     } catch (error) {
       toastError(getErrorMessage(error));
     }
@@ -125,13 +144,56 @@ export function WorkspaceMembersPanel() {
         </ul>
       )}
 
+      {canManage && pendingInvites.length > 0 ? (
+        <div>
+          <p className="mb-1.5 text-[11px] uppercase tracking-wider text-neutral-400">
+            Pending invites
+          </p>
+          <ul className="divide-y divide-neutral-100 rounded-md border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-700">
+            {pendingInvites.map((invite) => (
+              <li
+                key={invite.id}
+                className="flex items-center justify-between gap-3 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">
+                    {invite.email}
+                  </p>
+                  <p className="flex items-center gap-1 text-[11px] text-neutral-400">
+                    <IconClock size={12} stroke={1.75} />
+                    Pending — joins automatically on signup
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-[11px] capitalize text-neutral-400">
+                    {invite.role}
+                  </span>
+                  <button
+                    type="button"
+                    title="Revoke invite"
+                    disabled={revokeInvite.isPending}
+                    onClick={() =>
+                      void handleRevokeInvite(invite.id, invite.email)
+                    }
+                    className="cursor-pointer rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 disabled:opacity-40 dark:hover:bg-neutral-800"
+                  >
+                    <IconTrash size={14} stroke={1.75} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {canManage ? (
         <form onSubmit={(e) => void handleInvite(e)} className="space-y-2">
           <p className="text-[11px] uppercase tracking-wider text-neutral-400">
             Invite by email
           </p>
           <p className="text-[12px] text-neutral-500">
-            They must already have a DevTask account with this email.
+            If they don't have a DevTask account yet, they'll join
+            automatically once they sign up with this email.
           </p>
           <div className="flex flex-wrap gap-2">
             <div className="relative min-w-[200px] flex-1">

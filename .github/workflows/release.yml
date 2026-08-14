@@ -1,0 +1,82 @@
+name: release
+
+# Builds native installers for macOS (Intel + Apple Silicon), Windows, and
+# Linux, then attaches them to a draft GitHub Release. Push a tag like
+# `v0.1.0-alpha.1` to trigger it, or run it manually from the Actions tab.
+#
+# Builds are unsigned (no Apple/Windows code-signing certs configured), so
+# macOS shows an "unidentified developer" warning and Windows shows a
+# SmartScreen prompt on first launch — expected for an unsigned alpha build.
+#
+# No secrets are required beyond the default GITHUB_TOKEN: this workflow does
+# not set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY, so Workspace (cloud)
+# mode ships as "not configured" and Personal mode works fully offline.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: install node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: "DevTask v__VERSION__"
+          releaseBody: |
+            Alpha build — unsigned. On macOS: right-click the app and choose
+            Open the first time to bypass Gatekeeper. On Windows: click
+            "More info" -> "Run anyway" on the SmartScreen prompt.
+
+            Personal mode works fully offline. Workspace (team cloud sync)
+            requires your own Supabase project — see docs/SUPABASE_SETUP.md.
+          releaseDraft: true
+          prerelease: true
+          args: ${{ matrix.args }}

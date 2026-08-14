@@ -13,6 +13,36 @@ async function getDb(): Promise<Database> {
   return db;
 }
 
+/** Keep multi-row statements well under SQLite's bound-parameter limit. */
+const BATCH_SIZE = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
+}
+
+/** Batch-fetch local `updated_at` for a set of ids (one query per chunk, not one per row). */
+async function fetchLocalUpdatedAtMap(
+  table: "contexts" | "groups" | "group_links" | "tasks" | "task_comments",
+  ids: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+  const database = await getDb();
+  for (const batch of chunk(ids, BATCH_SIZE)) {
+    const placeholders = batch.map((_, i) => `$${i + 1}`).join(", ");
+    const rows = await database.select<{ id: string; updated_at: string }[]>(
+      `SELECT id, updated_at FROM ${table} WHERE id IN (${placeholders})`,
+      batch,
+    );
+    for (const row of rows) map.set(row.id, row.updated_at);
+  }
+  return map;
+}
+
 export type CloudContext = {
   id: string;
   name: string;
@@ -269,6 +299,221 @@ export async function upsertCloudComment(
   );
 }
 
+export async function upsertCloudContextsMany(
+  workspaceId: string,
+  contexts: CloudContext[],
+): Promise<void> {
+  if (contexts.length === 0) return;
+  const database = await getDb();
+  for (const batch of chunk(contexts, BATCH_SIZE)) {
+    const values: unknown[] = [];
+    const rows = batch.map((ctx, i) => {
+      const b = i * 8;
+      values.push(
+        ctx.id,
+        ctx.name,
+        ctx.color,
+        ctx.description,
+        ctx.position,
+        ctx.created_at,
+        ctx.updated_at,
+        workspaceId,
+      );
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8})`;
+    });
+    await database.execute(
+      `INSERT INTO contexts (
+         id, name, color, description, position, created_at, updated_at, workspace_id
+       ) VALUES ${rows.join(", ")}
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         color = excluded.color,
+         description = excluded.description,
+         position = excluded.position,
+         updated_at = excluded.updated_at,
+         workspace_id = excluded.workspace_id`,
+      values,
+    );
+  }
+}
+
+export async function upsertCloudGroupsMany(
+  workspaceId: string,
+  groups: CloudGroup[],
+): Promise<void> {
+  if (groups.length === 0) return;
+  const database = await getDb();
+  for (const batch of chunk(groups, BATCH_SIZE)) {
+    const values: unknown[] = [];
+    const rows = batch.map((group, i) => {
+      const b = i * 9;
+      values.push(
+        group.id,
+        group.context_id,
+        group.name,
+        group.description,
+        group.color,
+        group.position,
+        group.created_at,
+        group.updated_at,
+        workspaceId,
+      );
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9})`;
+    });
+    await database.execute(
+      `INSERT INTO groups (
+         id, context_id, name, description, color, position,
+         created_at, updated_at, workspace_id
+       ) VALUES ${rows.join(", ")}
+       ON CONFLICT(id) DO UPDATE SET
+         context_id = excluded.context_id,
+         name = excluded.name,
+         description = excluded.description,
+         color = excluded.color,
+         position = excluded.position,
+         updated_at = excluded.updated_at,
+         workspace_id = excluded.workspace_id`,
+      values,
+    );
+  }
+}
+
+export async function upsertCloudGroupLinksMany(
+  workspaceId: string,
+  links: CloudGroupLink[],
+): Promise<void> {
+  if (links.length === 0) return;
+  const database = await getDb();
+  for (const batch of chunk(links, BATCH_SIZE)) {
+    const values: unknown[] = [];
+    const rows = batch.map((link, i) => {
+      const b = i * 9;
+      const kind = link.kind === "folder" ? "folder" : "url";
+      values.push(
+        link.id,
+        link.group_id,
+        link.label,
+        link.url,
+        kind,
+        link.position,
+        link.created_at,
+        link.updated_at,
+        workspaceId,
+      );
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9})`;
+    });
+    await database.execute(
+      `INSERT INTO group_links (
+         id, group_id, label, url, kind, position,
+         created_at, updated_at, workspace_id
+       ) VALUES ${rows.join(", ")}
+       ON CONFLICT(id) DO UPDATE SET
+         group_id = excluded.group_id,
+         label = excluded.label,
+         url = excluded.url,
+         kind = excluded.kind,
+         position = excluded.position,
+         updated_at = excluded.updated_at,
+         workspace_id = excluded.workspace_id`,
+      values,
+    );
+  }
+}
+
+export async function upsertCloudTasksMany(
+  workspaceId: string,
+  tasks: CloudTask[],
+): Promise<void> {
+  if (tasks.length === 0) return;
+  const database = await getDb();
+  for (const batch of chunk(tasks, BATCH_SIZE)) {
+    const values: unknown[] = [];
+    const rows = batch.map((task, i) => {
+      const b = i * 17;
+      values.push(
+        task.id,
+        task.title,
+        task.description,
+        task.context_id,
+        task.group_id,
+        task.state,
+        task.is_today ? 1 : 0,
+        task.start_date,
+        task.end_date,
+        task.position,
+        task.recurrence,
+        task.archived_at,
+        task.created_at,
+        task.updated_at,
+        workspaceId,
+        task.assignee_id,
+        task.created_by_id,
+      );
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12}, $${b + 13}, $${b + 14}, $${b + 15}, $${b + 16}, $${b + 17})`;
+    });
+    await database.execute(
+      `INSERT INTO tasks (
+         id, title, description, context_id, group_id, state, is_today,
+         start_date, end_date, position, recurrence, archived_at,
+         created_at, updated_at, workspace_id, assignee_id, created_by_id
+       ) VALUES ${rows.join(", ")}
+       ON CONFLICT(id) DO UPDATE SET
+         title = excluded.title,
+         description = excluded.description,
+         context_id = excluded.context_id,
+         group_id = excluded.group_id,
+         state = excluded.state,
+         is_today = excluded.is_today,
+         start_date = excluded.start_date,
+         end_date = excluded.end_date,
+         position = excluded.position,
+         recurrence = excluded.recurrence,
+         archived_at = excluded.archived_at,
+         updated_at = excluded.updated_at,
+         workspace_id = excluded.workspace_id,
+         assignee_id = excluded.assignee_id,
+         created_by_id = excluded.created_by_id`,
+      values,
+    );
+  }
+}
+
+export async function upsertCloudCommentsMany(
+  workspaceId: string,
+  comments: CloudTaskComment[],
+): Promise<void> {
+  if (comments.length === 0) return;
+  const database = await getDb();
+  for (const batch of chunk(comments, BATCH_SIZE)) {
+    const values: unknown[] = [];
+    const rows = batch.map((comment, i) => {
+      const b = i * 7;
+      values.push(
+        comment.id,
+        workspaceId,
+        comment.task_id,
+        comment.author_id,
+        comment.body,
+        comment.created_at,
+        comment.updated_at,
+      );
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7})`;
+    });
+    await database.execute(
+      `INSERT INTO task_comments (
+         id, workspace_id, task_id, author_id, body, created_at, updated_at
+       ) VALUES ${rows.join(", ")}
+       ON CONFLICT(id) DO UPDATE SET
+         body = excluded.body,
+         updated_at = excluded.updated_at,
+         task_id = excluded.task_id,
+         author_id = excluded.author_id,
+         workspace_id = excluded.workspace_id`,
+      values,
+    );
+  }
+}
+
 async function deleteByIds(
   table: "contexts" | "groups" | "group_links" | "tasks" | "task_comments",
   ids: string[],
@@ -351,76 +596,81 @@ export async function mergeWorkspaceCache(
   await deleteByIds("tasks", options.deletedTaskIds ?? []);
   await deleteByIds("task_comments", options.deletedCommentIds ?? []);
 
-  const contextIds = new Set<string>();
+  const contextIds = new Set(payload.contexts.map((c) => c.id));
+  const localContextUpdatedAt = await fetchLocalUpdatedAtMap(
+    "contexts",
+    [...contextIds],
+  );
+  const contextsToUpsert: CloudContext[] = [];
   for (const ctx of payload.contexts) {
-    contextIds.add(ctx.id);
-    const local = await database.select<{ updated_at: string }[]>(
-      "SELECT updated_at FROM contexts WHERE id = $1",
-      [ctx.id],
-    );
-    const localUpdated = local[0]?.updated_at;
+    const localUpdated = localContextUpdatedAt.get(ctx.id);
     if (localUpdated && !isSyncNewerOrEqual(ctx.updated_at, localUpdated)) {
       localWins++;
       repushContextIds.push(ctx.id);
       continue;
     }
-    await upsertCloudContext(workspaceId, ctx);
+    contextsToUpsert.push(ctx);
   }
+  await upsertCloudContextsMany(workspaceId, contextsToUpsert);
 
-  const groupIds = new Set<string>();
+  const groupIds = new Set(payload.groups.map((g) => g.id));
+  const localGroupUpdatedAt = await fetchLocalUpdatedAtMap(
+    "groups",
+    [...groupIds],
+  );
+  const groupsToUpsert: CloudGroup[] = [];
   for (const group of payload.groups) {
-    groupIds.add(group.id);
-    const local = await database.select<{ updated_at: string }[]>(
-      "SELECT updated_at FROM groups WHERE id = $1",
-      [group.id],
-    );
-    const localUpdated = local[0]?.updated_at;
+    const localUpdated = localGroupUpdatedAt.get(group.id);
     if (localUpdated && !isSyncNewerOrEqual(group.updated_at, localUpdated)) {
       localWins++;
       repushGroupIds.push(group.id);
       continue;
     }
-    await upsertCloudGroup(workspaceId, group);
+    groupsToUpsert.push(group);
   }
+  await upsertCloudGroupsMany(workspaceId, groupsToUpsert);
 
-  const linkIds = new Set<string>();
+  const linkIds = new Set(payload.groupLinks.map((l) => l.id));
+  const localLinkUpdatedAt = await fetchLocalUpdatedAtMap(
+    "group_links",
+    [...linkIds],
+  );
+  const linksToUpsert: CloudGroupLink[] = [];
   for (const link of payload.groupLinks) {
-    linkIds.add(link.id);
-    const local = await database.select<{ updated_at: string }[]>(
-      "SELECT updated_at FROM group_links WHERE id = $1",
-      [link.id],
-    );
-    const localUpdated = local[0]?.updated_at;
+    const localUpdated = localLinkUpdatedAt.get(link.id);
     if (localUpdated && !isSyncNewerOrEqual(link.updated_at, localUpdated)) {
       localWins++;
       repushGroupLinkIds.push(link.id);
       continue;
     }
-    await upsertCloudGroupLink(workspaceId, link);
+    linksToUpsert.push(link);
   }
+  await upsertCloudGroupLinksMany(workspaceId, linksToUpsert);
 
-  const taskIds = new Set<string>();
+  const taskIds = new Set(payload.tasks.map((t) => t.id));
+  const localTaskUpdatedAt = await fetchLocalUpdatedAtMap(
+    "tasks",
+    [...taskIds],
+  );
+  const tasksToUpsert: CloudTask[] = [];
   for (const task of payload.tasks) {
-    taskIds.add(task.id);
-    const local = await database.select<{ updated_at: string }[]>(
-      "SELECT updated_at FROM tasks WHERE id = $1",
-      [task.id],
-    );
-    const localUpdated = local[0]?.updated_at;
+    const localUpdated = localTaskUpdatedAt.get(task.id);
     if (localUpdated && !isSyncNewerOrEqual(task.updated_at, localUpdated)) {
       localWins++;
       repushTaskIds.push(task.id);
       continue;
     }
-    await upsertCloudTask(workspaceId, task);
+    tasksToUpsert.push(task);
   }
+  await upsertCloudTasksMany(workspaceId, tasksToUpsert);
 
+  const localCommentUpdatedAt = await fetchLocalUpdatedAtMap(
+    "task_comments",
+    payload.taskComments.map((c) => c.id),
+  );
+  const commentsToUpsert: CloudTaskComment[] = [];
   for (const comment of payload.taskComments) {
-    const local = await database.select<{ updated_at: string }[]>(
-      "SELECT updated_at FROM task_comments WHERE id = $1",
-      [comment.id],
-    );
-    const localUpdated = local[0]?.updated_at;
+    const localUpdated = localCommentUpdatedAt.get(comment.id);
     if (
       localUpdated &&
       !isSyncNewerOrEqual(comment.updated_at, localUpdated)
@@ -429,8 +679,9 @@ export async function mergeWorkspaceCache(
       repushCommentIds.push(comment.id);
       continue;
     }
-    await upsertCloudComment(workspaceId, comment);
+    commentsToUpsert.push(comment);
   }
+  await upsertCloudCommentsMany(workspaceId, commentsToUpsert);
 
   await purgeStaleOrphans("contexts", workspaceId, contextIds, lastSyncedAt);
   await purgeStaleOrphans("groups", workspaceId, groupIds, lastSyncedAt);
