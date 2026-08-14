@@ -7,6 +7,7 @@ interface MarkdownDescriptionFieldProps {
   placeholder?: string;
   rows?: number;
   id?: string;
+  onImageUpload?: (file: File) => Promise<string>;
 }
 
 export function MarkdownDescriptionField({
@@ -16,6 +17,7 @@ export function MarkdownDescriptionField({
   placeholder,
   rows = 6,
   id,
+  onImageUpload,
 }: MarkdownDescriptionFieldProps) {
   return (
     <MarkdownEditor
@@ -25,6 +27,7 @@ export function MarkdownDescriptionField({
       onBlur={onBlur}
       placeholder={placeholder}
       minHeight={Math.max(120, rows * 22)}
+      onImageUpload={onImageUpload}
     />
   );
 }

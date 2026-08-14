@@ -3,12 +3,36 @@ import { CaptureBar } from "./components/CaptureBar";
 import { useContexts } from "./hooks/useContexts";
 import { useSetupStatus } from "./hooks/useSetup";
 import { hideCaptureWindow } from "./lib/captureWindow";
+import {
+  DEFAULT_WORKSPACE,
+  getStoredCaptureWorkspace,
+  getStoredDataScope,
+} from "./lib/workspace";
 import { useTasksStore } from "./store/tasks";
+import { useWorkspaceStore } from "./store/workspace";
 
 export function CaptureApp() {
   const { data: setupComplete, isLoading } = useSetupStatus();
   const { data: contexts = [] } = useContexts();
   const { lastUsedContextId, setLastUsedContextId } = useTasksStore();
+
+  useEffect(() => {
+    const scope = getStoredDataScope();
+    const storedWorkspace = getStoredCaptureWorkspace();
+    const { setScope, setWorkspace } = useWorkspaceStore.getState();
+
+    if (scope === "workspace" && storedWorkspace) {
+      setScope("workspace");
+      setWorkspace({
+        id: storedWorkspace.id,
+        name: storedWorkspace.name,
+        plan: "free",
+      });
+    } else {
+      setScope("personal");
+      setWorkspace({ ...DEFAULT_WORKSPACE });
+    }
+  }, []);
 
   useEffect(() => {
     if (isLoading || setupComplete !== true) return;

@@ -1,7 +1,8 @@
 import type { Context, Group } from "../types";
+import type { WorkspaceSummary } from "../types/workspace";
 import { normalizeTag } from "./parseCapture";
 
-export type MentionTrigger = "context" | "group";
+export type MentionTrigger = "context" | "group" | "workspace";
 
 export interface ActiveMention {
   type: MentionTrigger;
@@ -44,6 +45,16 @@ export function getActiveMention(
       type: "group",
       query: atMatch[1],
       start: cursor - atMatch[0].length,
+      end: cursor,
+    };
+  }
+
+  const dollarMatch = before.match(/\$([\w-]*)$/);
+  if (dollarMatch) {
+    return {
+      type: "workspace",
+      query: dollarMatch[1],
+      start: cursor - dollarMatch[0].length,
       end: cursor,
     };
   }
@@ -126,12 +137,83 @@ export function getGroupMentionSuggestions(
   return matched.slice(0, 8);
 }
 
+export function getWorkspaceMentionSuggestions(
+  workspaces: WorkspaceSummary[],
+  query: string,
+  isSignedIn: boolean,
+): MentionSuggestion[] {
+  const personal: MentionSuggestion = {
+    id: "__personal__",
+    label: "Personal",
+    tag: "personal",
+    subtitle: "Local only on this device",
+  };
+
+  const matched = workspaces
+    .filter((ws) => matchesQuery(ws.name, query))
+    .map((ws) => ({
+      id: ws.id,
+      label: ws.name,
+      tag: normalizeTag(ws.name),
+      subtitle: "Team workspace",
+    }));
+
+  if (matched.length === 0 && !query.trim()) {
+    if (!isSignedIn) {
+      return [
+        personal,
+        {
+          id: "__hint__",
+          label: "Sign in for team workspaces",
+          tag: "",
+          subtitle: "Settings → Team workspace",
+          disabled: true,
+        },
+      ];
+    }
+    if (workspaces.length === 0) {
+      return [
+        personal,
+        {
+          id: "__hint__",
+          label: "No workspaces yet",
+          tag: "",
+          subtitle: "Create one in the header menu",
+          disabled: true,
+        },
+      ];
+    }
+  }
+
+  const items = [personal, ...matched];
+  const q = normalizeTag(query);
+  if (
+    query.trim() &&
+    q !== "personal" &&
+    !matched.some((m) => normalizeTag(m.label) === q)
+  ) {
+    items.push({
+      id: "__nomatch__",
+      label: `No workspace matching "${query.trim()}"`,
+      tag: "",
+      disabled: true,
+    });
+  }
+
+  return items.slice(0, 8);
+}
+
 export function applyMentionSelection(
   value: string,
   mention: ActiveMention,
   tag: string,
 ): { nextValue: string; nextCursor: number } {
-  const prefix = mention.type === "context" ? "#" : "@";
+  const prefix =
+    mention.type === "context"
+      ? "#"
+      : mention.type === "group"
+        ? "@"
+        : "$";
   const insert = `${prefix}${tag} `;
   const nextValue =
     value.slice(0, mention.start) + insert + value.slice(mention.end);

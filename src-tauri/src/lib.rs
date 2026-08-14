@@ -87,6 +87,51 @@ const MIGRATION_9: &str = "
   ALTER TABLE contexts ADD COLUMN description TEXT;
 ";
 
+const MIGRATION_10: &str = "
+  ALTER TABLE contexts ADD COLUMN workspace_id TEXT;
+  ALTER TABLE contexts ADD COLUMN updated_at TEXT;
+  UPDATE contexts SET updated_at = created_at WHERE updated_at IS NULL;
+
+  ALTER TABLE groups ADD COLUMN workspace_id TEXT;
+  ALTER TABLE tasks ADD COLUMN workspace_id TEXT;
+  ALTER TABLE group_links ADD COLUMN workspace_id TEXT;
+  ALTER TABLE group_links ADD COLUMN created_at TEXT;
+  ALTER TABLE group_links ADD COLUMN updated_at TEXT;
+  UPDATE group_links SET created_at = datetime('now') WHERE created_at IS NULL;
+  UPDATE group_links SET updated_at = datetime('now') WHERE updated_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS contexts_workspace_id_idx ON contexts (workspace_id);
+  CREATE INDEX IF NOT EXISTS groups_workspace_id_idx ON groups (workspace_id);
+  CREATE INDEX IF NOT EXISTS tasks_workspace_id_idx ON tasks (workspace_id);
+  CREATE INDEX IF NOT EXISTS group_links_workspace_id_idx ON group_links (workspace_id);
+
+  CREATE TABLE IF NOT EXISTS workspace_sync_meta (
+    workspace_id TEXT PRIMARY KEY,
+    last_synced_at TEXT NOT NULL
+  );
+";
+
+const MIGRATION_11: &str = "
+  ALTER TABLE tasks ADD COLUMN assignee_id TEXT;
+  ALTER TABLE tasks ADD COLUMN created_by_id TEXT;
+";
+
+const MIGRATION_12: &str = "
+  CREATE TABLE IF NOT EXISTS task_comments (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    author_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS task_comments_workspace_id_idx ON task_comments (workspace_id);
+  CREATE INDEX IF NOT EXISTS task_comments_task_id_idx ON task_comments (task_id);
+";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -142,6 +187,24 @@ pub fn run() {
             version: 9,
             description: "add_context_description",
             sql: MIGRATION_9,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "add_workspace_scope_columns",
+            sql: MIGRATION_10,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "add_task_assignee_columns",
+            sql: MIGRATION_11,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 12,
+            description: "add_task_comments",
+            sql: MIGRATION_12,
             kind: MigrationKind::Up,
         },
     ];

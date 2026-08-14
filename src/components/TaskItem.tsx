@@ -7,6 +7,7 @@ interface TaskItemProps {
   task: Task;
   context?: Context;
   group?: Group;
+  assigneeLabel?: string;
   showStateBadge?: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -17,6 +18,7 @@ export function TaskItem({
   task,
   context,
   group,
+  assigneeLabel,
   showStateBadge = true,
   selected,
   onSelect,
@@ -85,6 +87,14 @@ export function TaskItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        {assigneeLabel && (
+          <span
+            className="max-w-[6rem] truncate rounded-[10px] bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+            title={`Assigned to ${assigneeLabel}`}
+          >
+            {assigneeLabel}
+          </span>
+        )}
         {group && groupColor && (
           <span
             className="max-w-[7rem] truncate rounded-[10px] px-2 py-0.5 text-[11px]"

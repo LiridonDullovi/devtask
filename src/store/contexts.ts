@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { publishCaptureNav } from "../lib/captureDefaults";
 import type { ActiveView } from "../types";
 
 interface TaskReturnTo {
@@ -31,27 +32,48 @@ export const useContextsStore = create<ContextsStore>((set, get) => ({
   activeGroupId: null,
   activeTaskId: null,
   taskReturnTo: null,
-  setView: (view) =>
-    set({
+  setView: (view) => {
+    const next = {
       activeView: view,
       activeContextId: null,
       activeGroupId: null,
       ...clearTaskNav(),
-    }),
-  setContext: (id) =>
-    set({
-      activeView: "context",
+    };
+    publishCaptureNav({
+      activeView: view,
+      activeContextId: null,
+      activeGroupId: null,
+    });
+    set(next);
+  },
+  setContext: (id) => {
+    const next = {
+      activeView: "context" as const,
       activeContextId: id,
       activeGroupId: null,
       ...clearTaskNav(),
-    }),
-  setGroup: (contextId, groupId) =>
-    set({
-      activeView: "group",
+    };
+    publishCaptureNav({
+      activeView: "context",
+      activeContextId: id,
+      activeGroupId: null,
+    });
+    set(next);
+  },
+  setGroup: (contextId, groupId) => {
+    const next = {
+      activeView: "group" as const,
       activeContextId: contextId,
       activeGroupId: groupId,
       ...clearTaskNav(),
-    }),
+    };
+    publishCaptureNav({
+      activeView: "group",
+      activeContextId: contextId,
+      activeGroupId: groupId,
+    });
+    set(next);
+  },
   openTask: (taskId) => {
     const state = get();
     set({
@@ -80,6 +102,11 @@ export const useContextsStore = create<ContextsStore>((set, get) => ({
   backToContext: () => {
     const { activeContextId } = get();
     if (activeContextId) {
+      publishCaptureNav({
+        activeView: "context",
+        activeContextId,
+        activeGroupId: null,
+      });
       set({ activeView: "context", activeGroupId: null, ...clearTaskNav() });
     }
   },

@@ -38,7 +38,8 @@ export function GroupView({ onAddTask }: GroupViewProps) {
   const { data: group } = useGroup(activeGroupId);
   const { data: links = [] } = useGroupLinks(activeGroupId);
   const { data: tasks = [], isLoading } = useGroupTasks(activeGroupId);
-  const { selectedTaskId, setSelectedTaskId } = useTasksStore();
+  const { selectedTaskId, setSelectedTaskId, setLastUsedContextId } =
+    useTasksStore();
   const cycleState = useCycleTaskState();
   const reorderTasks = useReorderTasks();
   const updateName = useUpdateGroupName();
@@ -61,6 +62,12 @@ export function GroupView({ onAddTask }: GroupViewProps) {
     setIsEditing(false);
     setShowAddLink(false);
   }, [activeGroupId]);
+
+  useEffect(() => {
+    if (activeContextId) {
+      setLastUsedContextId(activeContextId);
+    }
+  }, [activeContextId, setLastUsedContextId]);
 
   useEffect(() => {
     setName(group?.name ?? "");

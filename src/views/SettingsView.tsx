@@ -18,8 +18,11 @@ import { saveTextExport } from "../lib/exportFile";
 import { getErrorMessage } from "../lib/errors";
 import { toastError, toastSuccess } from "../store/toast";
 import { ViewToolbar } from "../components/ViewToolbar";
+import { WorkspaceSettingsSection } from "../components/WorkspaceSettingsSection";
+import { useWorkspaceStore } from "../store/workspace";
 
 export function SettingsView() {
+  const { scope } = useWorkspaceStore();
   const [dbPath, setDbPath] = useState<string | null>(null);
   const [dbDir, setDbDir] = useState<string | null>(null);
   const [exportingJson, setExportingJson] = useState(false);
@@ -87,13 +90,18 @@ export function SettingsView() {
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto max-w-xl space-y-8">
+          <WorkspaceSettingsSection />
+
           <section>
             <h2 className="mb-1 text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-              Your data stays on your machine
+              {scope === "personal"
+                ? "Your data stays on your machine"
+                : "Local copy on this device"}
             </h2>
             <p className="mb-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-              DevTask stores everything locally in a SQLite file. No cloud, no
-              account — you own it. Back it up anytime or export to JSON/CSV.
+              {scope === "personal"
+                ? "DevTask stores everything locally in a SQLite file. No cloud, no account — you own it. Back it up anytime or export to JSON/CSV."
+                : "Until cloud sync is enabled, workspace mode still uses the same local database on this device. Export regularly as a backup."}
             </p>
 
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900/50">

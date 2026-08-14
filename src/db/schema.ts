@@ -1,4 +1,5 @@
-// src/db/schema.ts — canonical schema (migrations live in src-tauri/src/lib.rs)
+// src/db/schema.ts — canonical LOCAL schema (migrations live in src-tauri/src/lib.rs)
+// Cloud workspace schema: supabase/migrations/20260528120000_workspace_schema.sql
 export const SCHEMA = `
   contexts: id, name, color, description, position, created_at
   groups:   id, context_id, name, description, color, position, created_at, updated_at

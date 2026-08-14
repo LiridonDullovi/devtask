@@ -3,6 +3,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type { QueryScope } from "../db/dataScope";
+import { scopeQueryKey } from "../db/dataScope";
 import {
   createTask,
   cycleTaskState,
@@ -20,17 +22,34 @@ import {
   updateTaskDescription,
   updateTaskGroup,
   updateTaskRecurrence,
+  updateTaskAssignee,
   updateTaskState,
 } from "../db/queries";
+import { invalidateScopedData } from "../lib/queryInvalidation";
+import { getSupabase } from "../lib/supabase";
 import type { TaskRecurrence, TaskState } from "../types";
+import { useDataScope } from "./useDataScope";
 
-function invalidateTasks(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ["tasks"] });
-  qc.invalidateQueries({ queryKey: ["groups"] });
+function refreshTaskViews(
+  qc: ReturnType<typeof useQueryClient>,
+  scope: QueryScope,
+  taskId?: string,
+): void {
+  void invalidateScopedData(qc, scope);
+  if (taskId) {
+    void qc.invalidateQueries({
+      queryKey: ["tasks", "detail", taskId],
+      refetchType: "active",
+    });
+  }
 }
 
 export function useTasks() {
-  return useQuery({ queryKey: ["tasks"], queryFn: getTasks });
+  const dataScope = useDataScope();
+  return useQuery({
+    queryKey: scopeQueryKey(["tasks"], dataScope),
+    queryFn: () => getTasks(dataScope),
+  });
 }
 
 export function useTask(taskId: string | null) {
@@ -42,68 +61,101 @@ export function useTask(taskId: string | null) {
 }
 
 export function useTodayTasks() {
-  return useQuery({ queryKey: ["tasks", "today"], queryFn: getTodayTasks });
+  const dataScope = useDataScope();
+  return useQuery({
+    queryKey: scopeQueryKey(["tasks", "today"], dataScope),
+    queryFn: () => getTodayTasks(dataScope),
+  });
 }
 
 export function useContextTasks(contextId: string | null) {
+  const dataScope = useDataScope();
   return useQuery({
-    queryKey: ["tasks", "context", contextId],
+    queryKey: scopeQueryKey(["tasks", "context", contextId], dataScope),
     queryFn: () => getTasksByContext(contextId!),
     enabled: contextId !== null,
   });
 }
 
 export function useTaskNonGroupByContext(contextId: string | null) {
+  const dataScope = useDataScope();
   return useQuery({
-    queryKey: ["tasks", "non-group", contextId],
+    queryKey: scopeQueryKey(["tasks", "non-group", contextId], dataScope),
     queryFn: () => getTasksNonGroupByContext(contextId!),
     enabled: contextId !== null,
   });
 }
 
 export function useGroupTasks(groupId: string | null) {
+  const dataScope = useDataScope();
   return useQuery({
-    queryKey: ["tasks", "group", groupId],
+    queryKey: scopeQueryKey(["tasks", "group", groupId], dataScope),
     queryFn: () => getTasksByGroup(groupId!),
     enabled: groupId !== null,
   });
 }
 
+export type CreateTaskInput = Parameters<typeof createTask>[0] & {
+  scopeOverride?: Parameters<typeof createTask>[1];
+};
+
 export function useCreateTask() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
-    mutationFn: createTask,
-    onSuccess: () => invalidateTasks(qc),
+    mutationFn: async (input: CreateTaskInput) => {
+      const { scopeOverride, ...taskInput } = input;
+      const scope = scopeOverride ?? dataScope;
+      let createdById = taskInput.createdById;
+      if (scope.kind === "workspace" && !createdById) {
+        const { data } = await getSupabase().auth.getUser();
+        createdById = data.user?.id;
+      }
+      return createTask({ ...taskInput, createdById }, scope);
+    },
+    onSuccess: (_data, variables) => {
+      refreshTaskViews(qc, variables.scopeOverride ?? dataScope);
+    },
   });
 }
 
 export function useUpdateTaskState() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({ taskId, state }: { taskId: string; state: TaskState }) =>
       updateTaskState(taskId, state),
-    onSuccess: () => invalidateTasks(qc),
+    onSuccess: (_data, variables) => {
+      refreshTaskViews(qc, dataScope, variables.taskId);
+    },
   });
 }
 
 export function useCycleTaskState() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: cycleTaskState,
-    onSuccess: () => invalidateTasks(qc),
+    onSuccess: (_state, taskId) => {
+      refreshTaskViews(qc, dataScope, taskId);
+    },
   });
 }
 
 export function useToggleTaskToday() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: toggleTaskToday,
-    onSuccess: () => invalidateTasks(qc),
+    onSuccess: (_data, taskId) => {
+      refreshTaskViews(qc, dataScope, taskId);
+    },
   });
 }
 
 export function useUpdateTaskDescription() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({
       taskId,
@@ -113,16 +165,14 @@ export function useUpdateTaskDescription() {
       description: string;
     }) => updateTaskDescription(taskId, description),
     onSuccess: (_data, variables) => {
-      invalidateTasks(qc);
-      qc.invalidateQueries({
-        queryKey: ["tasks", "detail", variables.taskId],
-      });
+      refreshTaskViews(qc, dataScope, variables.taskId);
     },
   });
 }
 
 export function useUpdateTaskDates() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({
       taskId,
@@ -134,16 +184,14 @@ export function useUpdateTaskDates() {
       endDate: string | null;
     }) => updateTaskDates(taskId, { startDate, endDate }),
     onSuccess: (_data, variables) => {
-      invalidateTasks(qc);
-      qc.invalidateQueries({
-        queryKey: ["tasks", "detail", variables.taskId],
-      });
+      refreshTaskViews(qc, dataScope, variables.taskId);
     },
   });
 }
 
 export function useUpdateTaskGroup() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({
       taskId,
@@ -152,12 +200,15 @@ export function useUpdateTaskGroup() {
       taskId: string;
       groupId: string | null;
     }) => updateTaskGroup(taskId, groupId),
-    onSuccess: () => invalidateTasks(qc),
+    onSuccess: (_data, variables) => {
+      refreshTaskViews(qc, dataScope, variables.taskId);
+    },
   });
 }
 
 export function useUpdateTaskContext() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({
       taskId,
@@ -167,16 +218,14 @@ export function useUpdateTaskContext() {
       contextId: string;
     }) => updateTaskContext(taskId, contextId),
     onSuccess: (_data, variables) => {
-      invalidateTasks(qc);
-      qc.invalidateQueries({
-        queryKey: ["tasks", "detail", variables.taskId],
-      });
+      refreshTaskViews(qc, dataScope, variables.taskId);
     },
   });
 }
 
 export function useUpdateTaskRecurrence() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: ({
       taskId,
@@ -186,26 +235,42 @@ export function useUpdateTaskRecurrence() {
       recurrence: TaskRecurrence;
     }) => updateTaskRecurrence(taskId, recurrence),
     onSuccess: (_data, variables) => {
-      invalidateTasks(qc);
-      qc.invalidateQueries({
-        queryKey: ["tasks", "detail", variables.taskId],
-      });
+      refreshTaskViews(qc, dataScope, variables.taskId);
+    },
+  });
+}
+
+export function useUpdateTaskAssignee() {
+  const qc = useQueryClient();
+  const dataScope = useDataScope();
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      assigneeId,
+    }: {
+      taskId: string;
+      assigneeId: string | null;
+    }) => updateTaskAssignee(taskId, assigneeId),
+    onSuccess: (_data, variables) => {
+      refreshTaskViews(qc, dataScope, variables.taskId);
     },
   });
 }
 
 export function useReorderTasks() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: reorderTasks,
-    onSuccess: () => invalidateTasks(qc),
+    onSuccess: () => refreshTaskViews(qc, dataScope),
   });
 }
 
 export function useDeleteTask() {
   const qc = useQueryClient();
+  const dataScope = useDataScope();
   return useMutation({
     mutationFn: deleteTask,
-    onSuccess: () => invalidateTasks(qc),
+    onSuccess: () => refreshTaskViews(qc, dataScope),
   });
 }

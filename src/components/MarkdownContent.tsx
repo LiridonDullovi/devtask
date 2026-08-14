@@ -1,10 +1,21 @@
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  DEVTASK_ASSET_PREFIX,
+  devtaskAssetPath,
+  isDevtaskAssetUrl,
+} from "../lib/workspaceStorage";
+import { StorageImage } from "./StorageImage";
 
 interface MarkdownContentProps {
   source: string;
   className?: string;
   compact?: boolean;
+}
+
+function markdownUrlTransform(url: string): string {
+  if (url.startsWith(DEVTASK_ASSET_PREFIX)) return url;
+  return defaultUrlTransform(url);
 }
 
 export function MarkdownContent({
@@ -18,6 +29,7 @@ export function MarkdownContent({
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={markdownUrlTransform}
         components={{
           a: ({ href, children }) => (
             <a
@@ -29,6 +41,21 @@ export function MarkdownContent({
               {children}
             </a>
           ),
+          img: ({ src, alt }) => {
+            if (isDevtaskAssetUrl(src)) {
+              return (
+                <StorageImage path={devtaskAssetPath(src!)} alt={alt ?? ""} />
+              );
+            }
+            return (
+              <img
+                src={src}
+                alt={alt ?? ""}
+                className="my-2 max-h-80 max-w-full rounded-md border border-neutral-200 dark:border-neutral-700"
+                loading="lazy"
+              />
+            );
+          },
         }}
       >
         {source}

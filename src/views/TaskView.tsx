@@ -1,26 +1,31 @@
 import { IconArrowLeft } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DateField } from "../components/DateField";
 import { DeleteTaskDialog } from "../components/DeleteTaskDialog";
 import { GroupLinkPills } from "../components/GroupLinkPills";
 import { MarkdownDescriptionField } from "../components/MarkdownDescriptionField";
 import { Select } from "../components/Select";
+import { TaskCommentsSection } from "../components/TaskCommentsSection";
 import { useContexts } from "../hooks/useContexts";
 import { useAllGroups, useGroup, useGroupLinks } from "../hooks/useGroups";
 import {
   useCycleTaskState,
   useTask,
   useToggleTaskToday,
+  useUpdateTaskAssignee,
   useUpdateTaskContext,
   useUpdateTaskDates,
   useUpdateTaskDescription,
   useUpdateTaskGroup,
   useUpdateTaskRecurrence,
 } from "../hooks/useTasks";
+import { useDataScope } from "../hooks/useDataScope";
+import { useWorkspaceMembers } from "../hooks/useWorkspaceMembers";
 import { groupDisplayColor } from "../lib/colors";
 import { RECURRENCE_OPTIONS } from "../lib/recurrence";
 import { parseDateInput, toDateInputValue } from "../lib/taskDates";
 import { STATE_LABELS, taskStateCheckboxClass } from "../lib/taskStates";
+import { uploadWorkspaceImage } from "../lib/workspaceStorage";
 import { useContextsStore } from "../store/contexts";
 import { useTasksStore } from "../store/tasks";
 
@@ -36,8 +41,13 @@ export function TaskView() {
   const updateGroup = useUpdateTaskGroup();
   const updateContext = useUpdateTaskContext();
   const updateRecurrence = useUpdateTaskRecurrence();
+  const updateAssignee = useUpdateTaskAssignee();
   const toggleToday = useToggleTaskToday();
   const cycleState = useCycleTaskState();
+  const dataScope = useDataScope();
+  const workspaceId =
+    dataScope.kind === "workspace" ? dataScope.workspaceId : undefined;
+  const { data: members = [] } = useWorkspaceMembers(workspaceId);
   const { setLastUsedContextId, setSelectedTaskId } = useTasksStore();
 
   const [description, setDescription] = useState("");
@@ -75,6 +85,33 @@ export function TaskView() {
         }))
         .filter((g) => g.options.length > 0),
     [contexts, groupsByContext],
+  );
+
+  const assigneeOptions = useMemo(
+    () => [
+      { value: "", label: "Unassigned" },
+      ...members.map((m) => ({
+        value: m.user_id,
+        label: m.display_name || m.email.split("@")[0],
+      })),
+    ],
+    [members],
+  );
+
+  const isWorkspaceTask = dataScope.kind === "workspace";
+
+  const handleImageUpload = useCallback(
+    (file: File) => {
+      if (dataScope.kind !== "workspace" || !activeTaskId) {
+        return Promise.reject(new Error("Images require a workspace task."));
+      }
+      return uploadWorkspaceImage(
+        dataScope.workspaceId,
+        activeTaskId,
+        file,
+      );
+    },
+    [dataScope, activeTaskId],
   );
 
   if (!activeTaskId || !task) {
@@ -195,6 +232,7 @@ export function TaskView() {
               onChange={setDescription}
               onBlur={() => void saveDescription()}
               rows={8}
+              onImageUpload={isWorkspaceTask ? handleImageUpload : undefined}
             />
           </div>
 
@@ -247,6 +285,23 @@ export function TaskView() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
+            {isWorkspaceTask && (
+              <div>
+                <label className="mb-1.5 block text-[11px] uppercase tracking-wider text-neutral-400">
+                  Assignee
+                </label>
+                <Select
+                  value={task.assignee_id ?? ""}
+                  onChange={(assigneeId) =>
+                    void updateAssignee.mutateAsync({
+                      taskId,
+                      assigneeId: assigneeId || null,
+                    })
+                  }
+                  options={assigneeOptions}
+                />
+              </div>
+            )}
             <div>
               <label className="mb-1.5 block text-[11px] uppercase tracking-wider text-neutral-400">
                 Repeat
@@ -319,6 +374,14 @@ export function TaskView() {
 
           {task.group_id && groupLinks.length > 0 && (
             <GroupLinkPills links={groupLinks} />
+          )}
+
+          {isWorkspaceTask && workspaceId && (
+            <TaskCommentsSection
+              taskId={taskId}
+              workspaceId={workspaceId}
+              onImageUpload={handleImageUpload}
+            />
           )}
 
           <button
