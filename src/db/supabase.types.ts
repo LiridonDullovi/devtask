@@ -395,7 +395,9 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_personal: boolean
           name: string
+          owner_user_id: string | null
           plan: Database["public"]["Enums"]["workspace_plan"]
           slug: string | null
           updated_at: string
@@ -403,7 +405,9 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_personal?: boolean
           name: string
+          owner_user_id?: string | null
           plan?: Database["public"]["Enums"]["workspace_plan"]
           slug?: string | null
           updated_at?: string
@@ -411,7 +415,9 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_personal?: boolean
           name?: string
+          owner_user_id?: string | null
           plan?: Database["public"]["Enums"]["workspace_plan"]
           slug?: string | null
           updated_at?: string
@@ -427,6 +433,16 @@ export type Database = {
         Args: { workspace_name: string }
         Returns: {
           id: string
+          name: string
+          plan: Database["public"]["Enums"]["workspace_plan"]
+          slug: string
+        }[]
+      }
+      ensure_personal_workspace: {
+        Args: never
+        Returns: {
+          id: string
+          is_personal: boolean
           name: string
           plan: Database["public"]["Enums"]["workspace_plan"]
           slug: string

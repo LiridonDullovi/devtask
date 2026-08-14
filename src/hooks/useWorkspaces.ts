@@ -15,7 +15,7 @@ async function fetchWorkspaces(): Promise<WorkspaceListItem[]> {
   const { data, error } = await supabase
     .from("workspace_members")
     .select(
-      "role, workspaces ( id, name, slug, plan, created_at )",
+      "role, workspaces ( id, name, slug, plan, created_at, is_personal )",
     )
     .eq("user_id", userData.user.id);
 
@@ -31,6 +31,7 @@ async function fetchWorkspaces(): Promise<WorkspaceListItem[]> {
         slug: ws.slug,
         plan: ws.plan as WorkspacePlan,
         role: row.role as WorkspaceRole,
+        is_personal: ws.is_personal,
       },
     ];
   });
@@ -71,6 +72,35 @@ export function useCreateWorkspace() {
         slug: workspace.slug,
         plan: workspace.plan as WorkspacePlan,
         role: "owner" as const,
+      } satisfies WorkspaceListItem;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+}
+
+/** Returns the caller's private personal workspace, creating it on first use. */
+export function useEnsurePersonalWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<WorkspaceListItem> => {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.rpc("ensure_personal_workspace");
+      if (error) throw error;
+
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) {
+        throw new Error("Personal workspace was created but no data was returned.");
+      }
+
+      return {
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        plan: row.plan as WorkspacePlan,
+        role: "owner" as const,
+        is_personal: row.is_personal,
       } satisfies WorkspaceListItem;
     },
     onSuccess: () => {

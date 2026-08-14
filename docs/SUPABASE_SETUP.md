@@ -1,6 +1,6 @@
 # Supabase setup — Workspaces & teams (v1)
 
-DevTask uses **local SQLite** for Personal mode. **Workspace mode** will sync team data through Supabase. Personal cloud sync across your own devices is planned for later.
+DevTask uses **local SQLite** for Personal mode. **Workspace mode** syncs team data through Supabase. Personal mode also has an opt-in **"Sync tasks across devices"** toggle (Settings, while signed in) that syncs just your own tasks between your own machines, without joining a team — see section 5a.
 
 ## 1. Create the Supabase project
 
@@ -24,6 +24,7 @@ Open **SQL Editor** in the dashboard and run these migrations **in order**:
 5. `supabase/migrations/20260528160000_task_comments.sql` — task comment threads
 6. `supabase/migrations/20260528170000_workspace_storage.sql` — private image bucket for markdown
 7. `supabase/migrations/20260528180000_workspace_invites.sql` — pending invites (invite an email before they have an account)
+8. `supabase/migrations/20260528190000_personal_workspace.sql` — personal cross-device sync (auto-provisioned private workspace per user)
 
 Or, if you use the Supabase CLI linked to this repo:
 
@@ -74,6 +75,15 @@ In **Settings → Team workspace**, with a workspace selected in the header:
    - If not, the invite goes into a **Pending invites** list (shown in the same panel, with a revoke button) and activates automatically the moment they sign up with that email — no separate "tell them to sign up first" step needed.
 2. Invited users see the workspace in the header switcher after sign-in.
 3. **Sync now** — pull team tasks into the local cache; edits in workspace mode push to Supabase.
+
+## 5a. Personal cross-device sync (app)
+
+In **Settings**, while in **Personal** scope and signed in, a **"Sync tasks across devices"** toggle appears:
+
+- Signing in by itself changes nothing — local data stays local until this toggle is switched on.
+- Turning it on: creates (or reuses) a private, single-member "personal workspace" for that user (`ensure_personal_workspace` RPC), reassigns every local-only row to it, and pushes them up — reusing the exact same sync engine as team workspaces.
+- Turning it off pauses syncing; local tasks stay visible and editable, they just stop reaching Supabase until re-enabled.
+- This personal workspace never appears in the team workspace switcher, and `invite_workspace_member` refuses to invite anyone into it.
 
 ## 6. Verify RLS with two test users
 
@@ -129,7 +139,8 @@ Or use the Supabase MCP tool `generate_typescript_types` in Cursor.
 
 | Mode | Storage | Cloud |
 |------|---------|--------|
-| **Personal** | SQLite on device | None (export JSON for backup) |
+| **Personal** (sync off) | SQLite on device | None (export JSON for backup) |
+| **Personal** (sync on) | SQLite cache + Supabase, via a private per-user workspace | Pull on sign-in / realtime; push on every edit |
 | **Workspace** | SQLite cache + Supabase | Pull on workspace switch; push on every edit |
 
 Local IDs today are strings like `ctx-work`. Cloud rows use **UUID**. The sync layer will map or migrate IDs when uploading — plan that in the next dev phase.
@@ -161,3 +172,5 @@ Local IDs today are strings like `ctx-work`. Cloud rows use **UUID**. The sync l
 - [x] App: conflict resolution (last-write-wins by updated_at)
 - [x] App: pending invites (invite by email before signup)
 - [x] Sync engine: batched pull/push (no more one round trip per row)
+- [x] App: discoverable sign-in (header dialog, not buried in Settings)
+- [x] App: personal cross-device sync (opt-in, per-user private workspace)

@@ -1,4 +1,7 @@
 import { IconCloud, IconLock, IconUsers } from "@tabler/icons-react";
+import { useState } from "react";
+import { AuthDialog } from "./AuthDialog";
+import { PersonalSyncToggle } from "./PersonalSyncToggle";
 import { SyncStatusBadge } from "./SyncStatusBadge";
 import { WorkspaceAuthPanel } from "./WorkspaceAuthPanel";
 import { WorkspaceMembersPanel } from "./WorkspaceMembersPanel";
@@ -18,6 +21,7 @@ export function WorkspaceSettingsSection() {
   const activeWorkspace = workspaces.find((w) => w.id === workspace.id);
   const hasActiveWorkspace =
     isWorkspace && workspace.id !== DEFAULT_WORKSPACE.id;
+  const [authOpen, setAuthOpen] = useState(false);
 
   return (
     <section>
@@ -27,7 +31,7 @@ export function WorkspaceSettingsSection() {
       <p className="mb-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
         {isWorkspace
           ? "Sign in and select a workspace. Tasks sync with Supabase; invite members below."
-          : "Personal mode is local-only on this device. Switch to Workspace in the header for team features. Personal cloud backup comes later."}
+          : "Personal mode is local-only on this device by default. Sign in below to optionally sync your personal tasks across your own machines, or switch to Workspace in the header for team features."}
       </p>
 
       <div className="space-y-3">
@@ -39,8 +43,19 @@ export function WorkspaceSettingsSection() {
             </div>
             <SyncStatusBadge status={syncStatus} lastSyncedAt={lastSyncedAt} />
           </div>
-          <WorkspaceAuthPanel />
+          {isSignedIn ? (
+            <WorkspaceAuthPanel />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAuthOpen(true)}
+              className="cursor-pointer rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-[13px] text-white hover:bg-neutral-800 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Sign in
+            </button>
+          )}
         </div>
+        <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
 
         {isWorkspace && isSignedIn && (
           <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/30">
@@ -91,6 +106,12 @@ export function WorkspaceSettingsSection() {
 
         {hasActiveWorkspace && isSignedIn && <WorkspaceSyncPanel />}
 
+        {!isWorkspace && isSignedIn && (
+          <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900/30">
+            <PersonalSyncToggle />
+          </div>
+        )}
+
         {!isWorkspace && (
           <button
             type="button"
@@ -107,9 +128,7 @@ export function WorkspaceSettingsSection() {
             Coming later
           </div>
           <ul className="list-inside list-disc text-[12px] leading-relaxed text-neutral-400">
-            <li>Realtime updates across devices</li>
-            <li>Conflict resolution when two people edit the same task</li>
-            <li>Invite by email before signup (pending invites)</li>
+            <li>Google / GitHub sign-in (email + password only for now)</li>
           </ul>
         </div>
       </div>

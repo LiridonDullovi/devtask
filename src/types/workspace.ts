@@ -21,6 +21,7 @@ export interface WorkspaceSummary {
   memberCount?: number;
   plan?: WorkspacePlan;
   role?: WorkspaceRole;
+  is_personal?: boolean;
 }
 
 export interface WorkspaceMember {

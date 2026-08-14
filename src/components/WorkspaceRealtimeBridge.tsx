@@ -26,18 +26,26 @@ const REALTIME_TABLES = [
 /** Pulls cloud changes when teammates edit workspace data (requires Realtime enabled). */
 export function WorkspaceRealtimeBridge() {
   const queryClient = useQueryClient();
-  const { scope, workspace, setLastSyncedAt } = useWorkspaceStore();
+  const { scope, workspace, personalSyncEnabled, personalWorkspaceId, setLastSyncedAt } =
+    useWorkspaceStore();
   const { isSignedIn } = useAuth();
-  const workspaceId =
+  const teamWorkspaceId =
     workspace.id !== DEFAULT_WORKSPACE.id ? workspace.id : null;
+  const effectiveWorkspaceId =
+    scope === "workspace"
+      ? teamWorkspaceId
+      : personalSyncEnabled
+        ? personalWorkspaceId
+        : null;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
 
   useEffect(() => {
-    if (scope !== "workspace" || !workspaceId || !isSignedIn) {
+    if (!effectiveWorkspaceId || !isSignedIn) {
       return;
     }
+    const workspaceId = effectiveWorkspaceId;
 
     const supabase = getSupabase();
     let cancelled = false;
@@ -94,7 +102,7 @@ export function WorkspaceRealtimeBridge() {
       clearTimeout(debounceRef.current);
       void supabase.removeChannel(channel);
     };
-  }, [scope, workspaceId, isSignedIn, queryClient, setLastSyncedAt]);
+  }, [effectiveWorkspaceId, isSignedIn, queryClient, setLastSyncedAt]);
 
   return null;
 }

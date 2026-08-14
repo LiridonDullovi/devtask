@@ -2,7 +2,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useWorkspaces } from "../hooks/useWorkspaces";
-import { DEFAULT_WORKSPACE, getStoredActiveWorkspaceId } from "../lib/workspace";
+import {
+  DEFAULT_WORKSPACE,
+  getStoredActiveWorkspaceId,
+  getStoredPersonalSyncEnabled,
+  getStoredPersonalWorkspaceId,
+} from "../lib/workspace";
 import { useWorkspaceStore } from "../store/workspace";
 
 /**
@@ -21,6 +26,7 @@ export function WorkspaceAuthBridge() {
     (s) => s.resetWorkspaceSelection,
   );
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  const hydratePersonalSync = useWorkspaceStore((s) => s.hydratePersonalSync);
 
   useEffect(() => {
     if (loading) return;
@@ -29,6 +35,15 @@ export function WorkspaceAuthBridge() {
     prevUserIdRef.current = userId;
 
     if (prev === undefined) {
+      // Initial mount with an already-established session (e.g. app restart
+      // while signed in) — hydrate personal-sync state without treating it
+      // as a sign-in transition.
+      if (userId) {
+        hydratePersonalSync(
+          getStoredPersonalWorkspaceId(userId),
+          getStoredPersonalSyncEnabled(userId),
+        );
+      }
       return;
     }
 
@@ -41,6 +56,10 @@ export function WorkspaceAuthBridge() {
       return;
     }
 
+    hydratePersonalSync(
+      getStoredPersonalWorkspaceId(userId),
+      getStoredPersonalSyncEnabled(userId),
+    );
     resetWorkspaceSelection();
   }, [
     userId,
@@ -48,16 +67,18 @@ export function WorkspaceAuthBridge() {
     queryClient,
     resetForSignOut,
     resetWorkspaceSelection,
+    hydratePersonalSync,
   ]);
 
   useEffect(() => {
     if (!userId || !isFetched || workspaces === undefined) return;
 
+    const teamWorkspaces = workspaces.filter((w) => !w.is_personal);
     const { workspace } = useWorkspaceStore.getState();
     const storedId = getStoredActiveWorkspaceId(userId);
     const match =
-      workspaces.find((w) => w.id === workspace.id) ??
-      (storedId ? workspaces.find((w) => w.id === storedId) : undefined);
+      teamWorkspaces.find((w) => w.id === workspace.id) ??
+      (storedId ? teamWorkspaces.find((w) => w.id === storedId) : undefined);
 
     if (match) {
       if (match.id !== workspace.id || match.name !== workspace.name) {
@@ -66,8 +87,8 @@ export function WorkspaceAuthBridge() {
       return;
     }
 
-    if (workspaces.length > 0) {
-      setWorkspace(workspaces[0], userId);
+    if (teamWorkspaces.length > 0) {
+      setWorkspace(teamWorkspaces[0], userId);
       return;
     }
 

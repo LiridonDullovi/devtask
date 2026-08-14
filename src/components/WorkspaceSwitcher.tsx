@@ -12,7 +12,8 @@ export function WorkspaceSwitcher() {
   const userId = user?.id;
   const { workspace, setWorkspace, resetWorkspaceSelection } =
     useWorkspaceStore();
-  const { data: workspaces = [], isLoading } = useWorkspaces(userId);
+  const { data: allWorkspaces = [], isLoading } = useWorkspaces(userId);
+  const workspaces = allWorkspaces.filter((w) => !w.is_personal);
   const createWorkspace = useCreateWorkspace();
   const [open, setOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);

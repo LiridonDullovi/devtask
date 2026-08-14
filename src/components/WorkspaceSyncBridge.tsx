@@ -17,18 +17,35 @@ function delay(ms: number): Promise<void> {
 /** Keeps sync status in sync with auth + scope; pulls cloud data into SQLite cache. */
 export function WorkspaceSyncBridge() {
   const queryClient = useQueryClient();
-  const { scope, workspace, setSyncStatus, setLastSyncedAt } =
-    useWorkspaceStore();
+  const {
+    scope,
+    workspace,
+    personalSyncEnabled,
+    personalWorkspaceId,
+    setSyncStatus,
+    setLastSyncedAt,
+  } = useWorkspaceStore();
   const { isSignedIn } = useAuth();
-  const workspaceId =
+  const teamWorkspaceId =
     workspace.id !== DEFAULT_WORKSPACE.id ? workspace.id : null;
+  // What workspace this device should actively pull/push for: a selected
+  // team workspace, or the personal workspace when its sync toggle is on.
+  // (Personal *reads* resolve to personalWorkspaceId whenever it exists —
+  // see useDataScope — regardless of this toggle; only active syncing gates
+  // on personalSyncEnabled.)
+  const effectiveWorkspaceId =
+    scope === "workspace"
+      ? teamWorkspaceId
+      : personalSyncEnabled
+        ? personalWorkspaceId
+        : null;
 
   useEffect(() => {
-    setSyncStatus(syncStatusForScope(scope, isSignedIn));
-  }, [scope, isSignedIn, setSyncStatus]);
+    setSyncStatus(syncStatusForScope(scope, isSignedIn, personalSyncEnabled));
+  }, [scope, isSignedIn, personalSyncEnabled, setSyncStatus]);
 
   useEffect(() => {
-    if (scope !== "workspace" || !workspaceId || !isSignedIn) {
+    if (!effectiveWorkspaceId || !isSignedIn) {
       return;
     }
 
@@ -37,12 +54,12 @@ export function WorkspaceSyncBridge() {
 
     async function runPull() {
       try {
-        return await syncWorkspacePull(workspaceId!);
+        return await syncWorkspacePull(effectiveWorkspaceId!);
       } catch {
         if (cancelled) return null;
         await delay(RETRY_DELAY_MS);
         if (cancelled) return null;
-        return await syncWorkspacePull(workspaceId!);
+        return await syncWorkspacePull(effectiveWorkspaceId!);
       }
     }
 
@@ -53,7 +70,7 @@ export function WorkspaceSyncBridge() {
         setSyncStatus("synced");
         void invalidateScopedData(queryClient, {
           kind: "workspace",
-          workspaceId,
+          workspaceId: effectiveWorkspaceId,
         });
         void queryClient.invalidateQueries({
           queryKey: ["task-comments"],
@@ -70,8 +87,7 @@ export function WorkspaceSyncBridge() {
       cancelled = true;
     };
   }, [
-    scope,
-    workspaceId,
+    effectiveWorkspaceId,
     isSignedIn,
     setSyncStatus,
     setLastSyncedAt,
