@@ -76,12 +76,16 @@ export const useContextsStore = create<ContextsStore>((set, get) => ({
   },
   openTask: (taskId) => {
     const state = get();
+    const taskReturnTo =
+      state.activeView === "task" && state.taskReturnTo
+        ? state.taskReturnTo
+        : {
+            view: state.activeView,
+            contextId: state.activeContextId,
+            groupId: state.activeGroupId,
+          };
     set({
-      taskReturnTo: {
-        view: state.activeView,
-        contextId: state.activeContextId,
-        groupId: state.activeGroupId,
-      },
+      taskReturnTo,
       activeView: "task",
       activeTaskId: taskId,
     });

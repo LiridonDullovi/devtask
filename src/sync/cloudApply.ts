@@ -11,7 +11,7 @@ async function fetchCloudTask(id: string) {
   const { data, error } = await getSupabase()
     .from("tasks")
     .select(
-      `id, context_id, group_id, title, description, state, is_today,
+      `id, context_id, group_id, parent_id, title, description, state, is_today,
        start_date, end_date, position, recurrence, archived_at,
        created_at, updated_at, assignee_id, created_by_id, workspace_id, deleted_at`,
     )
@@ -77,6 +77,7 @@ export async function applyCloudTaskById(taskId: string): Promise<void> {
     id: row.id,
     context_id: row.context_id,
     group_id: row.group_id,
+    parent_id: row.parent_id,
     title: row.title,
     description: row.description,
     state: row.state,

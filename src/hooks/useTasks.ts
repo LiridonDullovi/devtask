@@ -11,6 +11,7 @@ import {
   deleteTask,
   getTask,
   getTasks,
+  getChildTasks,
   getTasksNonGroupByContext,
   getTasksByContext,
   getTasksByGroup,
@@ -41,7 +42,15 @@ function refreshTaskViews(
       queryKey: ["tasks", "detail", taskId],
       refetchType: "active",
     });
+    void qc.invalidateQueries({
+      queryKey: ["tasks", "children", taskId],
+      refetchType: "active",
+    });
   }
+  void qc.invalidateQueries({
+    queryKey: ["tasks", "children"],
+    refetchType: "active",
+  });
 }
 
 export function useTasks() {
@@ -57,6 +66,14 @@ export function useTask(taskId: string | null) {
     queryKey: ["tasks", "detail", taskId],
     queryFn: () => getTask(taskId!),
     enabled: taskId !== null,
+  });
+}
+
+export function useChildTasks(parentId: string | null) {
+  return useQuery({
+    queryKey: ["tasks", "children", parentId],
+    queryFn: () => getChildTasks(parentId!),
+    enabled: parentId !== null,
   });
 }
 
@@ -115,6 +132,16 @@ export function useCreateTask() {
     },
     onSuccess: (_data, variables) => {
       refreshTaskViews(qc, variables.scopeOverride ?? dataScope);
+      if (variables.parentId) {
+        void qc.invalidateQueries({
+          queryKey: ["tasks", "children", variables.parentId],
+          refetchType: "active",
+        });
+        void qc.invalidateQueries({
+          queryKey: ["tasks", "detail", variables.parentId],
+          refetchType: "active",
+        });
+      }
     },
   });
 }

@@ -255,6 +255,7 @@ export type Database = {
           group_id: string | null
           id: string
           is_today: boolean
+          parent_id: string | null
           position: number
           recurrence: Database["public"]["Enums"]["task_recurrence"]
           start_date: string | null
@@ -275,6 +276,7 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_today?: boolean
+          parent_id?: string | null
           position?: number
           recurrence?: Database["public"]["Enums"]["task_recurrence"]
           start_date?: string | null
@@ -295,6 +297,7 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_today?: boolean
+          parent_id?: string | null
           position?: number
           recurrence?: Database["public"]["Enums"]["task_recurrence"]
           start_date?: string | null
@@ -316,6 +319,13 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {
@@ -486,6 +496,10 @@ export type Database = {
           role: Database["public"]["Enums"]["workspace_role"]
           user_id: string
         }[]
+      }
+      reassign_task_comments_workspace: {
+        Args: { dest_workspace_id: string | null; task_ids: string[] }
+        Returns: undefined
       }
       remove_workspace_member: {
         Args: { p_user_id: string; p_workspace_id: string }

@@ -132,6 +132,11 @@ const MIGRATION_12: &str = "
   CREATE INDEX IF NOT EXISTS task_comments_task_id_idx ON task_comments (task_id);
 ";
 
+const MIGRATION_13: &str = "
+  ALTER TABLE tasks ADD COLUMN parent_id TEXT REFERENCES tasks(id);
+  CREATE INDEX IF NOT EXISTS tasks_parent_id_idx ON tasks (parent_id);
+";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -205,6 +210,12 @@ pub fn run() {
             version: 12,
             description: "add_task_comments",
             sql: MIGRATION_12,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 13,
+            description: "add_task_parent_id",
+            sql: MIGRATION_13,
             kind: MigrationKind::Up,
         },
     ];

@@ -173,7 +173,6 @@ export function useCreateTask() {
 
 ## What NOT to build in V1
 - Reminders / notifications
-- Subtasks
 - Search
 - Cloud sync (that's the paid tier)
 - Team features

@@ -735,16 +735,17 @@ async function cloneRecurringTaskIfNeeded(task: Task): Promise<void> {
 
   await database.execute(
     `INSERT INTO tasks (
-       id, title, description, context_id, group_id, state, is_today,
+       id, title, description, context_id, group_id, parent_id, state, is_today,
        start_date, end_date, position, recurrence, archived_at,
        created_at, updated_at, workspace_id, assignee_id, created_by_id
-     ) VALUES ($1, $2, $3, $4, $5, 'todo', $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14, $15)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, 'todo', $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16)`,
     [
       id,
       task.title,
       task.description,
       task.context_id,
       task.group_id,
+      task.parent_id ?? null,
       task.is_today,
       shiftDateByRecurrence(task.start_date, task.recurrence),
       shiftDateByRecurrence(task.end_date, task.recurrence),
@@ -836,11 +837,44 @@ export async function getTask(taskId: string): Promise<Task | null> {
   return rows[0] ?? null;
 }
 
+export async function getChildTasks(
+  parentId: string,
+  options: { includeArchived?: boolean } = {},
+): Promise<Task[]> {
+  const database = await getDb();
+  const archivedSql = options.includeArchived
+    ? ""
+    : "AND archived_at IS NULL";
+  return database.select<Task[]>(
+    `SELECT * FROM tasks
+     WHERE parent_id = $1 ${archivedSql}
+     ORDER BY position ASC, created_at ASC`,
+    [parentId],
+  );
+}
+
+async function pushChildrenIfCloud(parentId: string): Promise<void> {
+  const children = await getChildTasks(parentId, { includeArchived: true });
+  for (const child of children) {
+    await pushTaskIfCloud(child.id);
+  }
+}
+
+async function assertCanNestUnder(parentId: string): Promise<Task> {
+  const parent = await getTask(parentId);
+  if (!parent) throw new Error("Parent task not found.");
+  if (parent.parent_id) {
+    throw new Error("Subtasks cannot have their own subtasks.");
+  }
+  return parent;
+}
+
 export async function createTask(
   input: {
     title: string;
     contextId: string;
     groupId?: string | null;
+    parentId?: string | null;
     isToday?: boolean;
     description?: string | null;
     startDate?: string | null;
@@ -852,14 +886,20 @@ export async function createTask(
   scope: QueryScope = PERSONAL_SCOPE,
 ): Promise<Task> {
   const database = await getDb();
-  const workspaceId = workspaceIdFromScope(scope);
+  let workspaceId = workspaceIdFromScope(scope);
   const id = crypto.randomUUID();
   const timestamp = now();
   const isToday = input.isToday ? 1 : 0;
   let contextId = input.contextId;
   let groupId = input.groupId ?? null;
+  let parentId = input.parentId ?? null;
 
-  if (groupId) {
+  if (parentId) {
+    const parent = await assertCanNestUnder(parentId);
+    contextId = parent.context_id;
+    groupId = parent.group_id;
+    workspaceId = await getRowWorkspaceId("tasks", parentId);
+  } else if (groupId) {
     const group = await getGroup(groupId);
     if (group) {
       contextId = group.context_id;
@@ -875,16 +915,17 @@ export async function createTask(
 
   await database.execute(
     `INSERT INTO tasks (
-       id, title, description, context_id, group_id, state, is_today,
+       id, title, description, context_id, group_id, parent_id, state, is_today,
        start_date, end_date, position, recurrence, archived_at,
        created_at, updated_at, workspace_id, assignee_id, created_by_id
-     ) VALUES ($1, $2, $3, $4, $5, 'todo', $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14, $15)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, 'todo', $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16)`,
     [
       id,
       input.title.trim(),
       input.description?.trim() || null,
       contextId,
       groupId,
+      parentId,
       isToday,
       input.startDate ?? null,
       input.endDate ?? null,
@@ -1013,18 +1054,21 @@ export async function updateTaskGroup(
     if (!group) return;
 
     await database.execute(
-      `UPDATE tasks SET group_id = $1, context_id = $2, updated_at = $3 WHERE id = $4`,
+      `UPDATE tasks SET group_id = $1, context_id = $2, updated_at = $3
+       WHERE id = $4 OR parent_id = $4`,
       [groupId, group.context_id, timestamp, taskId],
     );
     await pushTaskIfCloud(taskId);
+    await pushChildrenIfCloud(taskId);
     return;
   }
 
   await database.execute(
-    "UPDATE tasks SET group_id = NULL, updated_at = $1 WHERE id = $2",
+    `UPDATE tasks SET group_id = NULL, updated_at = $1 WHERE id = $2 OR parent_id = $2`,
     [timestamp, taskId],
   );
   await pushTaskIfCloud(taskId);
+  await pushChildrenIfCloud(taskId);
 }
 
 export async function updateTaskContext(
@@ -1035,10 +1079,12 @@ export async function updateTaskContext(
   const timestamp = now();
 
   await database.execute(
-    `UPDATE tasks SET context_id = $1, group_id = NULL, updated_at = $2 WHERE id = $3`,
+    `UPDATE tasks SET context_id = $1, group_id = NULL, updated_at = $2
+     WHERE id = $3 OR parent_id = $3`,
     [contextId, timestamp, taskId],
   );
   await pushTaskIfCloud(taskId);
+  await pushChildrenIfCloud(taskId);
 }
 
 async function clearOtherInProgress(
@@ -1162,6 +1208,11 @@ export async function archiveOldDoneTasks(): Promise<void> {
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
+  const children = await getChildTasks(taskId, { includeArchived: true });
+  for (const child of children) {
+    await deleteTask(child.id);
+  }
+
   const database = await getDb();
   const task = await getTask(taskId);
   if (!task) throw new Error("Task not found.");
