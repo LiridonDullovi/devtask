@@ -79,6 +79,7 @@ export type CloudTask = {
   id: string;
   context_id: string;
   group_id: string | null;
+  parent_id: string | null;
   title: string;
   description: string | null;
   state: Task["state"];
@@ -230,15 +231,16 @@ export async function upsertCloudTask(
   const database = await getDb();
   await database.execute(
     `INSERT INTO tasks (
-       id, title, description, context_id, group_id, state, is_today,
+       id, title, description, context_id, group_id, parent_id, state, is_today,
        start_date, end_date, position, recurrence, archived_at,
        created_at, updated_at, workspace_id, assignee_id, created_by_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title,
        description = excluded.description,
        context_id = excluded.context_id,
        group_id = excluded.group_id,
+       parent_id = excluded.parent_id,
        state = excluded.state,
        is_today = excluded.is_today,
        start_date = excluded.start_date,
@@ -256,6 +258,7 @@ export async function upsertCloudTask(
       task.description,
       task.context_id,
       task.group_id,
+      task.parent_id,
       task.state,
       task.is_today ? 1 : 0,
       task.start_date,
@@ -426,16 +429,22 @@ export async function upsertCloudTasksMany(
 ): Promise<void> {
   if (tasks.length === 0) return;
   const database = await getDb();
-  for (const batch of chunk(tasks, BATCH_SIZE)) {
+  const ordered = [...tasks].sort((a, b) => {
+    if (!a.parent_id && b.parent_id) return -1;
+    if (a.parent_id && !b.parent_id) return 1;
+    return 0;
+  });
+  for (const batch of chunk(ordered, BATCH_SIZE)) {
     const values: unknown[] = [];
     const rows = batch.map((task, i) => {
-      const b = i * 17;
+      const b = i * 18;
       values.push(
         task.id,
         task.title,
         task.description,
         task.context_id,
         task.group_id,
+        task.parent_id,
         task.state,
         task.is_today ? 1 : 0,
         task.start_date,
@@ -449,11 +458,11 @@ export async function upsertCloudTasksMany(
         task.assignee_id,
         task.created_by_id,
       );
-      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12}, $${b + 13}, $${b + 14}, $${b + 15}, $${b + 16}, $${b + 17})`;
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12}, $${b + 13}, $${b + 14}, $${b + 15}, $${b + 16}, $${b + 17}, $${b + 18})`;
     });
     await database.execute(
       `INSERT INTO tasks (
-         id, title, description, context_id, group_id, state, is_today,
+         id, title, description, context_id, group_id, parent_id, state, is_today,
          start_date, end_date, position, recurrence, archived_at,
          created_at, updated_at, workspace_id, assignee_id, created_by_id
        ) VALUES ${rows.join(", ")}
@@ -462,6 +471,7 @@ export async function upsertCloudTasksMany(
          description = excluded.description,
          context_id = excluded.context_id,
          group_id = excluded.group_id,
+         parent_id = excluded.parent_id,
          state = excluded.state,
          is_today = excluded.is_today,
          start_date = excluded.start_date,

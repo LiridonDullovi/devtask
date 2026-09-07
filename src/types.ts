@@ -45,6 +45,8 @@ export interface Task {
   description: string | null;
   context_id: string;
   group_id: string | null;
+  /** One-level child: set only when this task belongs to another task. */
+  parent_id: string | null;
   state: TaskState;
   is_today: 0 | 1;
   start_date: string | null;

@@ -19,6 +19,7 @@ import { IconGripVertical } from "@tabler/icons-react";
 import { useMemo } from "react";
 import type { Context, Group, Task } from "../types";
 import { useDataScope } from "../hooks/useDataScope";
+import { useTasks } from "../hooks/useTasks";
 import { useWorkspaceMembers } from "../hooks/useWorkspaceMembers";
 import { EmptyState } from "./EmptyState";
 import { TASK_COLUMNS } from "../lib/taskStates";
@@ -43,6 +44,8 @@ function SortableTaskRow({
   context,
   group,
   assigneeLabel,
+  parentTitle,
+  childProgress,
   showStateBadge,
   selected,
   onSelect,
@@ -52,6 +55,8 @@ function SortableTaskRow({
   context?: Context;
   group?: Group;
   assigneeLabel?: string;
+  parentTitle?: string | null;
+  childProgress?: { done: number; total: number } | null;
   showStateBadge?: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -91,6 +96,8 @@ function SortableTaskRow({
           context={context}
           group={group}
           assigneeLabel={assigneeLabel}
+          parentTitle={parentTitle}
+          childProgress={childProgress}
           showStateBadge={showStateBadge}
           selected={selected}
           onSelect={onSelect}
@@ -106,6 +113,8 @@ function TaskColumn({
   sortable,
   contextMap,
   groupMap,
+  parentTitles,
+  childProgress,
   selectedTaskId,
   onSelectTask,
   onCycleState,
@@ -117,6 +126,8 @@ function TaskColumn({
   sortable: boolean;
   contextMap: Record<string, Context>;
   groupMap: Record<string, Group>;
+  parentTitles: Record<string, string>;
+  childProgress: Record<string, { done: number; total: number }>;
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
   onCycleState: (id: string) => void;
@@ -153,6 +164,12 @@ function TaskColumn({
         assigneeLabel={
           task.assignee_id ? assigneeLabels?.[task.assignee_id] : undefined
         }
+        parentTitle={
+          task.parent_id
+            ? (parentTitles[task.parent_id] ?? "Subtask")
+            : null
+        }
+        childProgress={childProgress[task.id] ?? null}
         showStateBadge={showStateBadge}
         selected={selectedTaskId === task.id}
         onSelect={() => onSelectTask(task.id)}
@@ -167,6 +184,12 @@ function TaskColumn({
         assigneeLabel={
           task.assignee_id ? assigneeLabels?.[task.assignee_id] : undefined
         }
+        parentTitle={
+          task.parent_id
+            ? (parentTitles[task.parent_id] ?? "Subtask")
+            : null
+        }
+        childProgress={childProgress[task.id] ?? null}
         showStateBadge={showStateBadge}
         selected={selectedTaskId === task.id}
         onSelect={() => onSelectTask(task.id)}
@@ -208,6 +231,25 @@ export function TaskList({
 }: TaskListProps) {
   const contextMap = Object.fromEntries(contexts.map((c) => [c.id, c]));
   const groupMap = Object.fromEntries(groups.map((g) => [g.id, g]));
+  const { data: allTasks = [] } = useTasks();
+  const parentTitles = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const task of allTasks) {
+      map[task.id] = task.title;
+    }
+    return map;
+  }, [allTasks]);
+  const childProgress = useMemo(() => {
+    const map: Record<string, { done: number; total: number }> = {};
+    for (const task of allTasks) {
+      if (!task.parent_id) continue;
+      const current = map[task.parent_id] ?? { done: 0, total: 0 };
+      current.total += 1;
+      if (task.state === "done") current.done += 1;
+      map[task.parent_id] = current;
+    }
+    return map;
+  }, [allTasks]);
   const dataScope = useDataScope();
   const workspaceId =
     dataScope.kind === "workspace" ? dataScope.workspaceId : undefined;
@@ -250,6 +292,8 @@ export function TaskList({
                 sortable={sortable}
                 contextMap={contextMap}
                 groupMap={groupMap}
+                parentTitles={parentTitles}
+                childProgress={childProgress}
                 selectedTaskId={selectedTaskId}
                 onSelectTask={onSelectTask}
                 onCycleState={onCycleState}
@@ -289,6 +333,8 @@ export function TaskList({
                     sortable={sortable}
                     contextMap={contextMap}
                     groupMap={groupMap}
+                    parentTitles={parentTitles}
+                    childProgress={childProgress}
                     selectedTaskId={selectedTaskId}
                     onSelectTask={onSelectTask}
                     onCycleState={onCycleState}

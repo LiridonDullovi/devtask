@@ -6,6 +6,8 @@ import { GroupLinkPills } from "../components/GroupLinkPills";
 import { MarkdownDescriptionField } from "../components/MarkdownDescriptionField";
 import { Select } from "../components/Select";
 import { TaskCommentsSection } from "../components/TaskCommentsSection";
+import { TaskSubtasksSection } from "../components/TaskSubtasksSection";
+import { MoveTaskDialog } from "../components/MoveItemDialog";
 import { useContexts } from "../hooks/useContexts";
 import { useAllGroups, useGroup, useGroupLinks } from "../hooks/useGroups";
 import {
@@ -30,8 +32,10 @@ import { useContextsStore } from "../store/contexts";
 import { useTasksStore } from "../store/tasks";
 
 export function TaskView() {
-  const { activeTaskId, taskReturnTo, backFromTask } = useContextsStore();
+  const { activeTaskId, taskReturnTo, backFromTask, openTask } =
+    useContextsStore();
   const { data: task } = useTask(activeTaskId);
+  const { data: parentTask } = useTask(task?.parent_id ?? null);
   const { data: contexts = [] } = useContexts();
   const { data: allGroups = [] } = useAllGroups();
   const { data: assignedGroup } = useGroup(task?.group_id ?? null);
@@ -54,6 +58,7 @@ export function TaskView() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
 
   useEffect(() => {
     setDescription(task?.description ?? "");
@@ -220,6 +225,15 @@ export function TaskView() {
                   ? ` · Repeats ${task.recurrence}`
                   : ""}
               </p>
+              {parentTask && (
+                <button
+                  type="button"
+                  onClick={() => openTask(parentTask.id)}
+                  className="mt-2 cursor-pointer text-[12px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                >
+                  Part of {parentTask.title}
+                </button>
+              )}
             </div>
           </div>
 
@@ -235,6 +249,8 @@ export function TaskView() {
               onImageUpload={isWorkspaceTask ? handleImageUpload : undefined}
             />
           </div>
+
+          <TaskSubtasksSection parent={task} onOpenTask={openTask} />
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">
@@ -324,7 +340,7 @@ export function TaskView() {
               <label className="mb-1.5 block text-[11px] uppercase tracking-wider text-neutral-400">
                 Context
               </label>
-              {task.group_id ? (
+              {task.parent_id || task.group_id ? (
                 <>
                   <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900">
                     <span
@@ -336,7 +352,9 @@ export function TaskView() {
                     </span>
                   </div>
                   <p className="mt-1.5 text-[11px] text-neutral-400">
-                    Inherited from group — change group to move context.
+                    {task.parent_id
+                      ? "Inherited from parent — use Move to… to detach."
+                      : "Inherited from group — change group to move context."}
                   </p>
                 </>
               ) : (
@@ -358,17 +376,30 @@ export function TaskView() {
               <label className="mb-1.5 block text-[11px] uppercase tracking-wider text-neutral-400">
                 Group
               </label>
-              <Select
-                value={task.group_id ?? ""}
-                onChange={(groupId) =>
-                  void updateGroup.mutateAsync({
-                    taskId,
-                    groupId: groupId || null,
-                  })
-                }
-                options={[{ value: "", label: "No group" }]}
-                groups={groupSelectGroups}
-              />
+              {task.parent_id ? (
+                <>
+                  <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900">
+                    <span className="text-[13px] text-neutral-700 dark:text-neutral-300">
+                      {assignedGroup?.name ?? "No group"}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-neutral-400">
+                    Inherited from parent — use Move to… to detach.
+                  </p>
+                </>
+              ) : (
+                <Select
+                  value={task.group_id ?? ""}
+                  onChange={(groupId) =>
+                    void updateGroup.mutateAsync({
+                      taskId,
+                      groupId: groupId || null,
+                    })
+                  }
+                  options={[{ value: "", label: "No group" }]}
+                  groups={groupSelectGroups}
+                />
+              )}
             </div>
           </div>
 
@@ -395,6 +426,14 @@ export function TaskView() {
             {task.is_today ? "Remove from Today" : "Add to Today"}
           </button>
 
+          <button
+            type="button"
+            onClick={() => setShowMoveDialog(true)}
+            className="cursor-pointer rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800"
+          >
+            Move to…
+          </button>
+
           <div className="border-t border-neutral-200 pt-6 dark:border-neutral-800">
             <button
               type="button"
@@ -414,6 +453,17 @@ export function TaskView() {
         onDeleted={() => {
           setSelectedTaskId(null);
           backFromTask();
+        }}
+      />
+      <MoveTaskDialog
+        open={showMoveDialog}
+        task={task}
+        onClose={() => setShowMoveDialog(false)}
+        onMoved={(result) => {
+          if (result.crossedScope) {
+            setSelectedTaskId(null);
+            backFromTask();
+          }
         }}
       />
     </>

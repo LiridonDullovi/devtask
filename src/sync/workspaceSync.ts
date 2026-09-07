@@ -143,7 +143,7 @@ export async function syncWorkspacePull(
     supabase
       .from("tasks")
       .select(
-        `id, context_id, group_id, title, description, state, is_today,
+        `id, context_id, group_id, parent_id, title, description, state, is_today,
          start_date, end_date, position, recurrence, archived_at,
          created_at, updated_at, assignee_id, created_by_id`,
       )

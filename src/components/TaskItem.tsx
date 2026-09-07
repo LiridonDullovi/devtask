@@ -8,6 +8,8 @@ interface TaskItemProps {
   context?: Context;
   group?: Group;
   assigneeLabel?: string;
+  parentTitle?: string | null;
+  childProgress?: { done: number; total: number } | null;
   showStateBadge?: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -19,6 +21,8 @@ export function TaskItem({
   context,
   group,
   assigneeLabel,
+  parentTitle,
+  childProgress,
   showStateBadge = true,
   selected,
   onSelect,
@@ -73,6 +77,11 @@ export function TaskItem({
         >
           {task.title}
         </span>
+        {parentTitle && (
+          <span className="mt-0.5 block truncate text-[11px] text-neutral-400">
+            ↳ {parentTitle}
+          </span>
+        )}
         {dateLabel && (
           <span
             className={`mt-0.5 block truncate text-[11px] ${
@@ -87,6 +96,14 @@ export function TaskItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        {childProgress && childProgress.total > 0 && (
+          <span
+            className="tabular-nums rounded-[10px] bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+            title={`${childProgress.done} of ${childProgress.total} subtasks done`}
+          >
+            {childProgress.done}/{childProgress.total}
+          </span>
+        )}
         {assigneeLabel && (
           <span
             className="max-w-[6rem] truncate rounded-[10px] bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"

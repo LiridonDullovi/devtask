@@ -72,7 +72,7 @@ export async function promoteLocalDataToWorkspace(
   );
 
   const tasks = await db.select<Task[]>(
-    `SELECT id, title, description, context_id, group_id, state, is_today,
+    `SELECT id, title, description, context_id, group_id, parent_id, state, is_today,
             start_date, end_date, position, recurrence, archived_at,
             created_at, updated_at, assignee_id, created_by_id
      FROM tasks WHERE workspace_id = $1`,

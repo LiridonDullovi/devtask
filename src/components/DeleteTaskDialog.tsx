@@ -50,7 +50,9 @@ export function DeleteTaskDialog({
     <Dialog open={open} title={`Delete "${task.title}"?`} onClose={handleClose}>
       <div className="space-y-4">
         <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-          This permanently removes the task. This action cannot be undone.
+          This permanently removes the task
+          {task.parent_id ? "" : " and any subtasks"}. This action cannot be
+          undone.
         </p>
 
         <div>

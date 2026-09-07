@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ColorPicker } from "../components/ColorPicker";
 import { AddGroupLinkForm, GroupLinkRow } from "../components/GroupLinkRow";
 import { DeleteGroupDialog } from "../components/DeleteGroupDialog";
+import { MoveGroupDialog } from "../components/MoveItemDialog";
 import { GroupLinkPills } from "../components/GroupLinkPills";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { MarkdownDescriptionField } from "../components/MarkdownDescriptionField";
@@ -57,6 +58,7 @@ export function GroupView({ onAddTask }: GroupViewProps) {
   const [description, setDescription] = useState("");
   const [showAddLink, setShowAddLink] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
 
   useEffect(() => {
     setIsEditing(false);
@@ -145,6 +147,13 @@ export function GroupView({ onAddTask }: GroupViewProps) {
             >
               Add task
             </button>
+            <button
+              type="button"
+              onClick={() => setShowMoveDialog(true)}
+              className="cursor-pointer rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[13px] text-neutral-500 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+            >
+              Move to…
+            </button>
             {isEditing ? (
               <button
                 type="button"
@@ -222,6 +231,14 @@ export function GroupView({ onAddTask }: GroupViewProps) {
         taskCount={tasks.length}
         onClose={() => setShowDeleteDialog(false)}
         onDeleted={backToContext}
+      />
+      <MoveGroupDialog
+        open={showMoveDialog}
+        group={group}
+        onClose={() => setShowMoveDialog(false)}
+        onMoved={(result) => {
+          if (result.moved) backToContext();
+        }}
       />
     </div>
   );
