@@ -6,6 +6,15 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
+/**
+ * Where Supabase auth emails (confirmation, password recovery) land. A hosted
+ * page rather than a localhost URL, because a desktop app has no web server of
+ * its own — see docs/auth-callback.html. Must also be listed under
+ * Authentication → URL Configuration → Redirect URLs in the Supabase dashboard.
+ */
+export const AUTH_CALLBACK_URL =
+  "https://liridondullovi.github.io/devtask/auth-callback.html";
+
 let client: SupabaseClient<Database> | null = null;
 
 export function getSupabase(): SupabaseClient<Database> {

@@ -59,9 +59,11 @@ export function WorkspaceMembersPanel() {
       });
       setEmail("");
       toastSuccess(
-        result.status === "pending"
-          ? `Invited ${result.email} — they'll join automatically once they sign up with this email.`
-          : `Added ${result.email} to the workspace.`,
+        result.status !== "pending"
+          ? `Added ${result.email} to the workspace.`
+          : result.emailSent
+            ? `Invite emailed to ${result.email} — they'll join automatically once they sign up.`
+            : `Invited ${result.email}, but the email couldn't be sent — tell them to sign up with this address.`,
       );
     } catch (error) {
       toastError(getErrorMessage(error));

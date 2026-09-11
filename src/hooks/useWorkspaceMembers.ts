@@ -20,6 +20,8 @@ export interface InviteResult {
   /** "member" when the invitee already had an account and was added directly,
    *  "pending" when they don't yet — they join automatically once they sign up. */
   status: "member" | "pending";
+  /** Whether the notification email actually went out (pending invites only). */
+  emailSent?: boolean;
 }
 
 export interface PendingInviteRow {
@@ -74,7 +76,23 @@ export function useInviteWorkspaceMember(workspaceId: string | undefined) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("Invite was sent but no data was returned.");
-      return row as InviteResult;
+      const result = row as InviteResult;
+
+      // Best-effort notification. The invite row already exists and will still
+      // activate on signup, so a mail failure must not fail the mutation.
+      if (result.status === "pending") {
+        const { error: mailError } = await supabase.functions.invoke(
+          "send-invite-email",
+          { body: { workspaceId, email: result.email } },
+        );
+        if (mailError) {
+          console.warn("Invite created but email failed to send:", mailError);
+          return { ...result, emailSent: false };
+        }
+        return { ...result, emailSent: true };
+      }
+
+      return result;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["workspace-members", workspaceId] });

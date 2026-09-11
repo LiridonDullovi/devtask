@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  requestPasswordReset,
   signInWithPassword,
   signOut,
   signUpWithPassword,
@@ -15,7 +16,7 @@ export function WorkspaceAuthPanel() {
   const queryClient = useQueryClient();
   const resetForSignOut = useWorkspaceStore((s) => s.resetForSignOut);
   const { user, loading, isSignedIn } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
@@ -74,7 +75,13 @@ export function WorkspaceAuthPanel() {
     e.preventDefault();
     setPending(true);
     try {
-      if (mode === "signin") {
+      if (mode === "reset") {
+        await requestPasswordReset(email.trim());
+        toastSuccess(
+          "If that email has an account, a reset link is on its way.",
+        );
+        setMode("signin");
+      } else if (mode === "signin") {
         await signInWithPassword(email.trim(), password);
         toastSuccess("Signed in.");
       } else {
@@ -94,30 +101,36 @@ export function WorkspaceAuthPanel() {
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setMode("signin")}
-          className={`cursor-pointer rounded-md px-2.5 py-1 text-[12px] ${
-            mode === "signin"
-              ? "bg-neutral-200 font-medium text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100"
-              : "text-neutral-400 hover:text-neutral-600"
-          }`}
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("signup")}
-          className={`cursor-pointer rounded-md px-2.5 py-1 text-[12px] ${
-            mode === "signup"
-              ? "bg-neutral-200 font-medium text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100"
-              : "text-neutral-400 hover:text-neutral-600"
-          }`}
-        >
-          Sign up
-        </button>
-      </div>
+      {mode === "reset" ? (
+        <p className="text-[13px] text-neutral-600 dark:text-neutral-400">
+          Enter your email and we'll send you a link to set a new password.
+        </p>
+      ) : (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setMode("signin")}
+            className={`cursor-pointer rounded-md px-2.5 py-1 text-[12px] ${
+              mode === "signin"
+                ? "bg-neutral-200 font-medium text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100"
+                : "text-neutral-400 hover:text-neutral-600"
+            }`}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("signup")}
+            className={`cursor-pointer rounded-md px-2.5 py-1 text-[12px] ${
+              mode === "signup"
+                ? "bg-neutral-200 font-medium text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100"
+                : "text-neutral-400 hover:text-neutral-600"
+            }`}
+          >
+            Sign up
+          </button>
+        </div>
+      )}
       <input
         type="email"
         required
@@ -127,23 +140,40 @@ export function WorkspaceAuthPanel() {
         placeholder="you@company.com"
         className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] outline-none dark:border-neutral-700 dark:bg-neutral-900"
       />
-      <input
-        type="password"
-        required
-        minLength={6}
-        autoComplete={mode === "signin" ? "current-password" : "new-password"}
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Password"
-        className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] outline-none dark:border-neutral-700 dark:bg-neutral-900"
-      />
+      {mode !== "reset" && (
+        <input
+          type="password"
+          required
+          minLength={6}
+          autoComplete={mode === "signin" ? "current-password" : "new-password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] outline-none dark:border-neutral-700 dark:bg-neutral-900"
+        />
+      )}
       <button
         type="submit"
         disabled={pending}
         className="cursor-pointer rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-[13px] text-white hover:bg-neutral-800 disabled:opacity-50 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
       >
-        {pending ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+        {pending
+          ? "Please wait…"
+          : mode === "reset"
+            ? "Send reset link"
+            : mode === "signin"
+              ? "Sign in"
+              : "Create account"}
       </button>
+      {mode !== "signup" && (
+        <button
+          type="button"
+          onClick={() => setMode(mode === "reset" ? "signin" : "reset")}
+          className="cursor-pointer text-[12px] text-neutral-400 underline-offset-2 hover:text-neutral-600 hover:underline dark:hover:text-neutral-300"
+        >
+          {mode === "reset" ? "Back to sign in" : "Forgot password?"}
+        </button>
+      )}
     </form>
   );
 }

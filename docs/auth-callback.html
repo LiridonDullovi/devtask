@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DevTask — Email confirmation</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f5f5f0;
+        --card: #ffffff;
+        --border: #e5e5e5;
+        --text: #171717;
+        --muted: #737373;
+        --blue: #378add;
+        --green: #1d9e75;
+        --purple: #7f77dd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --card: #171717;
+          --border: #2e2e2e;
+          --text: #f5f5f5;
+          --muted: #a3a3a3;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 32px;
+        text-align: center;
+      }
+      .mark { margin: 0 auto 20px; display: block; }
+      h1 { margin: 0 0 8px; font-size: 19px; font-weight: 600; }
+      p { margin: 0; color: var(--muted); font-size: 14px; }
+      p + p { margin-top: 12px; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+      }
+      .detail {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
+    <main class="card">
+      <svg class="mark" width="56" height="56" viewBox="0 0 1024 1024" aria-hidden="true">
+        <rect width="1024" height="1024" rx="180" fill="#F5F5F0" />
+        <circle cx="420" cy="420" r="220" fill="#378ADD" style="mix-blend-mode: multiply" />
+        <circle cx="604" cy="420" r="220" fill="#1D9E75" style="mix-blend-mode: multiply" />
+        <circle cx="512" cy="604" r="220" fill="#7F77DD" style="mix-blend-mode: multiply" />
+      </svg>
+      <h1 id="title">Confirming…</h1>
+      <p id="message">One moment.</p>
+      <div class="detail" id="detail" hidden></div>
+
+      <form id="recovery" hidden style="margin-top: 20px; text-align: left">
+        <label
+          for="newPassword"
+          style="display: block; font-size: 13px; margin-bottom: 6px"
+          >New password</label
+        >
+        <input
+          id="newPassword"
+          type="password"
+          required
+          minlength="6"
+          autocomplete="new-password"
+          style="
+            width: 100%;
+            padding: 9px 12px;
+            font-size: 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            color: var(--text);
+          "
+        />
+        <button
+          type="submit"
+          style="
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 0;
+            border-radius: 8px;
+            background: var(--blue);
+            color: #fff;
+            cursor: pointer;
+          "
+        >
+          Set new password
+        </button>
+      </form>
+    </main>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const get = (key) => params.get(key) || hash.get(key);
+
+        const errorName = get("error");
+        const errorCode = get("error_code");
+        const description = get("error_description");
+        const error = errorName || errorCode;
+        const type = get("type");
+
+        const title = document.getElementById("title");
+        const message = document.getElementById("message");
+        const detail = document.getElementById("detail");
+
+        if (error) {
+          const expired = /expired|invalid/i.test(
+            [errorName, errorCode, description].join(" ")
+          );
+          title.textContent = expired
+            ? "This link has expired"
+            : "Something went wrong";
+          message.textContent = expired
+            ? "Confirmation links are only valid for a short time. Open DevTask and sign up again to get a fresh one."
+            : "We couldn't confirm your email with this link.";
+          if (description) {
+            detail.hidden = false;
+            detail.innerHTML =
+              "<code>" + description.replace(/\+/g, " ") + "</code>";
+          }
+          return;
+        }
+
+        if (type !== "recovery") {
+          title.textContent = "Email confirmed";
+          message.textContent =
+            "You can close this tab and sign in to DevTask.";
+          return;
+        }
+
+        // Recovery: supabase-js picks the session up out of the URL fragment,
+        // which is what authorises the updateUser call below.
+        const client = window.supabase.createClient(
+          "https://knxfxsyozoayiwcjohuw.supabase.co",
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtueGZ4c3lvem9heWl3Y2pvaHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDg5NTYsImV4cCI6MjA5NTk4NDk1Nn0.UGqnyfxCoj6u9mGRMsWdFmWjrjGsFzBkurJcI1zJ3Y8",
+          { auth: { detectSessionInUrl: true, persistSession: false } }
+        );
+
+        const form = document.getElementById("recovery");
+        const input = document.getElementById("newPassword");
+
+        title.textContent = "Checking your link…";
+        message.textContent = "One moment.";
+
+        client.auth.getSession().then(({ data }) => {
+          if (!data.session) {
+            title.textContent = "This link has expired";
+            message.textContent =
+              "Reset links are only valid for a short time. Open DevTask, choose 'Forgot password?' and request a new one.";
+            return;
+          }
+          title.textContent = "Choose a new password";
+          message.textContent = "Set a new password for your DevTask account.";
+          form.hidden = false;
+          input.focus();
+        });
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const button = form.querySelector("button");
+          button.disabled = true;
+          button.textContent = "Saving…";
+          try {
+            const { error: updateError } = await client.auth.updateUser({
+              password: input.value,
+            });
+            if (updateError) throw updateError;
+            form.hidden = true;
+            title.textContent = "Password updated";
+            message.textContent =
+              "You can close this tab and sign in to DevTask with your new password.";
+          } catch (err) {
+            button.disabled = false;
+            button.textContent = "Set new password";
+            detail.hidden = false;
+            detail.innerHTML =
+              "<code>" + (err && err.message ? err.message : String(err)) + "</code>";
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

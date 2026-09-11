@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
+import {
+  AUTH_CALLBACK_URL,
+  getSupabase,
+  isSupabaseConfigured,
+} from "../lib/supabase";
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -56,6 +60,15 @@ export async function signUpWithPassword(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
   return data;
+}
+
+/** Emails a recovery link that lands on the hosted callback page. */
+export async function requestPasswordReset(email: string) {
+  const supabase = getSupabase();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: AUTH_CALLBACK_URL,
+  });
+  if (error) throw error;
 }
 
 export async function signOut() {
