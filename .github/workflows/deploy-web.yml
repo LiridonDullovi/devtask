@@ -24,3 +24,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: web
+          # Pinned: the [assets] directory config needs a recent wrangler, and
+          # the action's default resolved to an out-of-date one.
+          wranglerVersion: "4"
