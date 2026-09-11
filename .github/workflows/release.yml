@@ -8,9 +8,13 @@ name: release
 # macOS shows an "unidentified developer" warning and Windows shows a
 # SmartScreen prompt on first launch — expected for an unsigned alpha build.
 #
-# No secrets are required beyond the default GITHUB_TOKEN: this workflow does
-# not set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY, so Workspace (cloud)
-# mode ships as "not configured" and Personal mode works fully offline.
+# Cloud features need VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY set as repo
+# secrets — Vite inlines them at build time, so without them a shipped binary
+# has sign-in and sync permanently disabled. The anon key is designed to be
+# public (it ships in every Supabase client bundle; RLS is what protects the
+# data), so embedding it in a release build is expected, not a leak.
+# If the secrets are absent the build still succeeds and degrades to
+# local-only Personal mode.
 
 on:
   push:
@@ -67,6 +71,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read by `pnpm build` (the beforeBuildCommand) and inlined by Vite.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         with:
           # Releases are named after the git tag that triggered them, so
           # pushing v0.3.0 publishes to v0.3.0. Manual (workflow_dispatch)
