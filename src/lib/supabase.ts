@@ -9,11 +9,11 @@ export const isSupabaseConfigured = Boolean(url && anonKey);
 /**
  * Where Supabase auth emails (confirmation, password recovery) land. A hosted
  * page rather than a localhost URL, because a desktop app has no web server of
- * its own — see docs/auth-callback.html. Must also be listed under
+ * its own — served by the Cloudflare Worker in web/, source at
+ * web/public/auth/callback/index.html. Must also be listed under
  * Authentication → URL Configuration → Redirect URLs in the Supabase dashboard.
  */
-export const AUTH_CALLBACK_URL =
-  "https://liridondullovi.github.io/devtask/auth-callback.html";
+export const AUTH_CALLBACK_URL = "https://devtask.lrdnd.com/auth/callback";
 
 let client: SupabaseClient<Database> | null = null;
 
