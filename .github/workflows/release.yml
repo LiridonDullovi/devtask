@@ -68,12 +68,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: app-v__VERSION__
-          releaseName: "DevTask v__VERSION__"
+          # Releases are named after the git tag that triggered them, so
+          # pushing v0.3.0 publishes to v0.3.0. Manual (workflow_dispatch)
+          # runs get a clearly-separate dev tag so they can never overwrite
+          # a real release.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('dev-build-{0}', github.run_number) }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('DevTask {0}', github.ref_name) || format('DevTask dev build {0}', github.run_number) }}
           releaseBody: |
-            Alpha build — unsigned. On macOS: right-click the app and choose
-            Open the first time to bypass Gatekeeper. On Windows: click
-            "More info" -> "Run anyway" on the SmartScreen prompt.
+            Unsigned build. On macOS: right-click the app and choose Open the
+            first time to bypass Gatekeeper. On Windows: click "More info" ->
+            "Run anyway" on the SmartScreen prompt.
 
             Personal mode works fully offline. Workspace (team cloud sync)
             requires your own Supabase project — see docs/SUPABASE_SETUP.md.

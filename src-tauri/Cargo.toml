@@ -1,6 +1,6 @@
 [package]
 name = "devtask"
-version = "0.1.0"
+version = "0.3.0"
 description = "A local-first, keyboard-driven task manager for developers"
 authors = ["Liridon Dullovi"]
 license = "MIT"
